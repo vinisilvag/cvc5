@@ -60,9 +60,7 @@ ProcessAssertions::ProcessAssertions(Env& env, SolverEngineStatistics& stats)
   d_true = nodeManager()->mkConst(true);
 }
 
-ProcessAssertions::~ProcessAssertions()
-{
-}
+ProcessAssertions::~ProcessAssertions() {}
 
 void ProcessAssertions::finishInit(PreprocessingPassContext* pc)
 {
@@ -312,7 +310,7 @@ bool ProcessAssertions::apply(AssertionPipeline& ap)
   {
     applyPass("ho-elim", ap);
   }
-  
+
   // begin: INVARIANT to maintain: no reordering of assertions or
   // introducing new ones
 
@@ -327,7 +325,8 @@ bool ProcessAssertions::apply(AssertionPipeline& ap)
   {
     applyPass("ff-disjunctive-bit", ap);
   }
-  if (options().ff.ffBitsum || options().ff.ffSolver == options::FfSolver::SPLIT_GB)
+  if (options().ff.ffBitsum
+      || options().ff.ffSolver == options::FfSolver::SPLIT_GB)
   {
     applyPass("ff-bitsum", ap);
   }
@@ -353,6 +352,9 @@ bool ProcessAssertions::apply(AssertionPipeline& ap)
   {
     applyPass("bv-eager-atoms", ap);
   }
+
+  // TODO: check correct place with Haniel later
+  applyPass("minimal-logic", ap);
 
   Trace("smt-proc") << "ProcessAssertions::apply() end" << endl;
   dumpAssertions("assertions::post-everything", ap);
