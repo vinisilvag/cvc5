@@ -33,6 +33,13 @@ class MinimalLogic : public PreprocessingPass
  protected:
   PreprocessingPassResult applyInternal(
       AssertionPipeline* assertionsToPreprocess) override;
+
+ private:
+  bool quantifiers = false, bitVectors = false, floatingPointers = false,
+       arrays = false, strings = false, linear = true, integers = false,
+       reals = false;
+  bool hasVariable(TNode assertion);
+  void traverseAssertion(TNode assertion);
 };
 
 }  // namespace passes
