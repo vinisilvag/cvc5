@@ -140,6 +140,8 @@ libcvc5_add_sources(
   preprocessing/util/boolean_simplification.h
   preprocessing/util/ite_utilities.cpp
   preprocessing/util/ite_utilities.h
+  preprocessing/util/minimal_logic_utilities.cpp
+  preprocessing/util/minimal_logic_utilities.h
   printer/ast/ast_printer.cpp
   printer/ast/ast_printer.h
   printer/enum_to_string.cpp
