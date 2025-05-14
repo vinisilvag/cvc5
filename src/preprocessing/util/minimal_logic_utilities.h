@@ -35,6 +35,7 @@ class MinimalLogicUtilities
   static bool isStringOperator(Kind nodeKind);
   static bool isArrayOperator(Kind nodeKind);
   static bool isQuantifier(Kind nodeKind);
+  static bool isDifferenceLogicOperator(Kind nodeKind);
 };
 
 }  // namespace util

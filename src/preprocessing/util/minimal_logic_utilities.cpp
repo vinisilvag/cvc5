@@ -224,7 +224,35 @@ bool MinimalLogicUtilities::isQuantifier(Kind nodeKind)
   {
     case Kind::FORALL:
     case Kind::EXISTS:
-    case Kind::LAMBDA:
+    case Kind::INST_CONSTANT:
+    case Kind::ORACLE:
+    case Kind::BOUND_VAR_LIST:
+    case Kind::INST_PATTERN:
+    case Kind::INST_NO_PATTERN:
+    case Kind::INST_ATTRIBUTE:
+    case Kind::INST_POOL:
+    case Kind::INST_ADD_TO_POOL:
+    case Kind::SKOLEM_ADD_TO_POOL:
+    case Kind::ORACLE_FORMULA_GEN:
+    case Kind::INST_PATTERN_LIST:
+    {
+      return true;
+    }
+    default: break;
+  }
+  return false;
+}
+
+bool MinimalLogicUtilities::isDifferenceLogicOperator(Kind nodeKind)
+{
+  switch (nodeKind)
+  {
+    case Kind::LT:
+    case Kind::LEQ:
+    case Kind::GT:
+    case Kind::GEQ:
+    case Kind::EQUAL:
+    case Kind::DISTINCT:
     {
       return true;
     }

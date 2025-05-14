@@ -32,18 +32,12 @@ MinimalLogic::MinimalLogic(PreprocessingPassContext* preprocContext)
 {
 }
 
-// TODO: improve this verification (just one traversal)
-bool MinimalLogic::hasVariable(TNode node)
-{
-  for (TNode current : NodeDfsIterable(node, VisitOrder::POSTORDER))
-    if (current.isVar()) return true;
-  return false;
-}
-
 void MinimalLogic::traverseAssertion(TNode assertion)
 {
   bool floatingPointerFunctions = false, bitVectorLiterals = false,
-       bitVectorFunctions = false;
+       bitVectorFunctions = false, idl = true, rdl = true;
+
+  std::unordered_map<TNode, bool> contains_var;
 
   // TODO: see cache stuff later
   for (TNode current : NodeDfsIterable(assertion, VisitOrder::POSTORDER))
@@ -77,43 +71,70 @@ void MinimalLogic::traverseAssertion(TNode assertion)
 
     // Handle arithmetic
     // Handle integer and reals
-    // TODO: check with Haniel later
     if (current.isVar())
     {
       if (current.getType().isInteger()) integers = true;
       if (current.getType().isReal()) reals = true;
     }
 
-    // Handle linearity
-    switch (current.getKind())
+    // Track variables only if we still consider the problem to be linear
+    if (linear == true)
     {
-      case Kind::MULT:
+      if (current.isVar())
       {
-        int variableCount = 0;
-        for (TNode child : current)
-          if (hasVariable(child)) variableCount++;
-        if (variableCount >= 2) linear = false;
-        break;
+        contains_var[current] = true;
       }
-      case Kind::ABS:
+      else
       {
-        bool hasChildrenVariable = hasVariable(current);
-        if (hasChildrenVariable) linear = false;
-        break;
+        bool has_var = false;
+        for (const TNode& child : current)
+        {
+          has_var |= contains_var[child];
+        }
+        contains_var[current] = has_var;
       }
-      case Kind::DIVISION:
-      case Kind::DIVISION_TOTAL:
-      case Kind::INTS_DIVISION:
-      case Kind::INTS_DIVISION_TOTAL:
-      {
-        int variableCount = 0;
-        for (TNode child : current)
-          if (hasVariable(child)) variableCount++;
-        if (variableCount >= 2) linear = false;
-        break;
-      }
-      default: break;
     }
+
+    // Handle linearity
+    // Do this only if the problem is still linear
+    if (linear == true)
+    {
+      switch (current.getKind())
+      {
+        case Kind::DIVISION:
+        case Kind::DIVISION_TOTAL:
+        case Kind::INTS_DIVISION:
+        case Kind::INTS_DIVISION_TOTAL:
+        case Kind::MULT:
+        {
+          int variableCount = 0;
+          for (TNode child : current)
+            if (contains_var[child]) variableCount++;
+          if (variableCount >= 2) linear = false;
+          break;
+        }
+        case Kind::ABS:
+        {
+          if (contains_var[current]) linear = false;
+          break;
+        }
+        default: break;
+      }
+    }
+
+    // Handle IDL and RDL
+    if (!util::MinimalLogicUtilities::isDifferenceLogicOperator(
+            current.getKind()))
+    {
+      idl = false;
+      rdl = false;
+    }
+    else
+    {
+      // Check the form
+    }
+
+    // Handle UF
 
     std::cout << current << "\n";
   }
@@ -142,8 +163,6 @@ PreprocessingPassResult MinimalLogic::applyInternal(
   {
     traverseAssertion(assertion);
   }
-
-  // IDL e RDL ?
 
   // UF: ?
 
