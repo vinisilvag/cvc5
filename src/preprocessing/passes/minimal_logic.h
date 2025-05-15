@@ -35,9 +35,9 @@ class MinimalLogic : public PreprocessingPass
       AssertionPipeline* assertionsToPreprocess) override;
 
  private:
-  bool quantifiers = false, bitVectors = false, floatingPointers = false,
-       arrays = false, strings = false, linear = true, integers = false,
-       reals = false;
+  bool hasQuantifiers = false, hasBitVectors = false,
+       hasFloatingPointers = false, hasArrays = false, hasStrings = false,
+       isLinear = true, hasIntegers = false, hasReals = false, isUF = false;
   bool hasVariable(TNode assertion);
   void traverseAssertion(TNode assertion);
 };

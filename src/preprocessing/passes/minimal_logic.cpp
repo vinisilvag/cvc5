@@ -34,70 +34,69 @@ MinimalLogic::MinimalLogic(PreprocessingPassContext* preprocContext)
 
 void MinimalLogic::traverseAssertion(TNode assertion)
 {
-  bool floatingPointerFunctions = false, bitVectorLiterals = false,
-       bitVectorFunctions = false, idl = true, rdl = true;
+  bool hasFloatingPointerFunctions = false, hasBitVectorLiterals = false,
+       hasBitVectorFunctions = false;
 
   std::unordered_map<TNode, bool> contains_var;
 
-  // TODO: see cache stuff later
-  for (TNode current : NodeDfsIterable(assertion, VisitOrder::POSTORDER))
+  for (TNode current : NodeDfsIterable(
+           assertion, VisitOrder::POSTORDER, [&contains_var](TNode nn) {
+             // Contains variable map used as cache
+             return contains_var.count(nn);
+           }))
   {
     // Handle quantifiers
     if (util::MinimalLogicUtilities::isQuantifier(current.getKind()))
-      quantifiers = true;
+      hasQuantifiers = true;
 
     // Handle BV and FP
-    if (current.getType().isBitVector()) bitVectorLiterals = true;
+    if (current.getType().isBitVector()) hasBitVectorLiterals = true;
     if (util::MinimalLogicUtilities::isBvOperator(current.getKind()))
-      bitVectorFunctions = true;
+      hasBitVectorFunctions = true;
     if (util::MinimalLogicUtilities::isFloatingPointerOperator(
             current.getKind()))
-      floatingPointerFunctions = true;
+      hasFloatingPointerFunctions = true;
 
     // Handle arrays
     if (current.getType().isArray()
         || util::MinimalLogicUtilities::isArrayOperator(current.getKind()))
-      arrays = true;
+      hasArrays = true;
 
     // Handle strings
     if (current.isVar())
     {
       if (current.getType().isString() || current.getType().isSequence()
           || current.getType().isRegExp())
-        strings = true;
+        hasStrings = true;
     }
     if (util::MinimalLogicUtilities::isStringOperator(current.getKind()))
-      strings = true;
+      hasStrings = true;
 
     // Handle arithmetic
     // Handle integer and reals
     if (current.isVar())
     {
-      if (current.getType().isInteger()) integers = true;
-      if (current.getType().isReal()) reals = true;
+      if (current.getType().isInteger()) hasIntegers = true;
+      if (current.getType().isReal()) hasReals = true;
     }
 
-    // Track variables only if we still consider the problem to be linear
-    if (linear == true)
+    if (current.isVar())
     {
-      if (current.isVar())
+      contains_var[current] = true;
+    }
+    else
+    {
+      bool has_var = false;
+      for (const TNode& child : current)
       {
-        contains_var[current] = true;
+        has_var |= contains_var[child];
       }
-      else
-      {
-        bool has_var = false;
-        for (const TNode& child : current)
-        {
-          has_var |= contains_var[child];
-        }
-        contains_var[current] = has_var;
-      }
+      contains_var[current] = has_var;
     }
 
     // Handle linearity
     // Do this only if the problem is still linear
-    if (linear == true)
+    if (isLinear == true)
     {
       switch (current.getKind())
       {
@@ -110,12 +109,12 @@ void MinimalLogic::traverseAssertion(TNode assertion)
           int variableCount = 0;
           for (TNode child : current)
             if (contains_var[child]) variableCount++;
-          if (variableCount >= 2) linear = false;
+          if (variableCount >= 2) isLinear = false;
           break;
         }
         case Kind::ABS:
         {
-          if (contains_var[current]) linear = false;
+          if (contains_var[current]) isLinear = false;
           break;
         }
         default: break;
@@ -123,24 +122,30 @@ void MinimalLogic::traverseAssertion(TNode assertion)
     }
 
     // Handle IDL and RDL
-    if (!util::MinimalLogicUtilities::isDifferenceLogicOperator(
-            current.getKind()))
-    {
-      idl = false;
-      rdl = false;
-    }
-    else
-    {
-      // Check the form
-    }
+    // if (!util::MinimalLogicUtilities::isDifferenceLogicOperator(
+    //         current.getKind()))
+    // {
+    //   idl = false;
+    //   rdl = false;
+    // }
+    // else
+    // {
+    //   // Check the form
+    // }
 
-    // Handle UF
+    // Handle UF (partially)
+    if (current.getKind() == Kind::APPLY_UF
+        || current.getKind() == Kind::UNINTERPRETED_SORT_VALUE)
+    {
+      isUF = true;
+    }
 
     std::cout << current << "\n";
   }
 
-  if (bitVectorLiterals || bitVectorFunctions) bitVectors = true;
-  if (bitVectorLiterals && floatingPointerFunctions) floatingPointers = true;
+  if (hasBitVectorLiterals || hasBitVectorFunctions) hasBitVectors = true;
+  if (hasBitVectorLiterals && hasFloatingPointerFunctions)
+    hasFloatingPointers = true;
 
   std::cout << "end assertion\n\n";
 }
@@ -166,13 +171,13 @@ PreprocessingPassResult MinimalLogic::applyInternal(
 
   // UF: ?
 
-  std::cout << "quantifiers = " << quantifiers << "\n";
-  std::cout << "strings = " << strings << "\n";
-  std::cout << "bitvectors = " << bitVectors << "\n";
-  std::cout << "floating pointers = " << floatingPointers << "\n";
-  std::cout << "linear = " << linear << "\n";
-  std::cout << "integers = " << integers << "\n";
-  std::cout << "reals = " << reals << "\n";
+  std::cout << "quantifiers = " << hasQuantifiers << "\n";
+  std::cout << "strings = " << hasStrings << "\n";
+  std::cout << "bitvectors = " << hasBitVectors << "\n";
+  std::cout << "floating pointers = " << hasFloatingPointers << "\n";
+  std::cout << "linear = " << isLinear << "\n";
+  std::cout << "integers = " << hasIntegers << "\n";
+  std::cout << "reals = " << hasReals << "\n";
 
   return PreprocessingPassResult::NO_CONFLICT;
 }
