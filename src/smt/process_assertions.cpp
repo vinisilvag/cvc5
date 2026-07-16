@@ -110,6 +110,9 @@ bool ProcessAssertions::apply(AssertionPipeline& ap)
     return true;
   }
 
+  // TODO: check correct place with Haniel later
+  applyPass("minimal-logic-detection", ap);
+
   if (options().bv.bvGaussElim)
   {
     applyPass("bv-gauss", ap);

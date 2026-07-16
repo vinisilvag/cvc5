@@ -127,6 +127,8 @@ libcvc5_add_sources(
   preprocessing/passes/unconstrained_simplifier.h
   preprocessing/passes/normalize.cpp
   preprocessing/passes/normalize.h
+  preprocessing/passes/minimal_logic_detection.cpp
+  preprocessing/passes/minimal_logic_detection.h
   preprocessing/preprocessing_pass.cpp
   preprocessing/preprocessing_pass.h
   preprocessing/preprocessing_pass_context.cpp
