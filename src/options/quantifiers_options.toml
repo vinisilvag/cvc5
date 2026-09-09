@@ -1928,3 +1928,13 @@ name   = "Quantifiers"
 [[option.mode.INTERLEAVE]]
   name = "interleave"
   help = "add instantiation and evaluation unfolding lemmas in the same step."
+
+
+# TODO: find best place to put this option inside this file
+[[option]]
+  name       = "ccfvSat"
+  category   = "regular"
+  long       = "ccfv-sat"
+  type       = "bool"
+  default    = "false"
+  help       = "enable SAT-based encoding for CCFV"
