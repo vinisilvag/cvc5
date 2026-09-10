@@ -920,6 +920,8 @@ libcvc5_add_sources(
   theory/quantifiers/ieval/term_evaluator.h
   theory/quantifiers/index_trie.cpp
   theory/quantifiers/index_trie.h
+  theory/quantifiers/ccfv_sat.cpp
+  theory/quantifiers/ccfv_sat.h
   theory/quantifiers/inst_match.cpp
   theory/quantifiers/inst_match.h
   theory/quantifiers/inst_match_trie.cpp

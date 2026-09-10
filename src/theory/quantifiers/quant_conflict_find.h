@@ -21,6 +21,7 @@
 #include "context/cdhashmap.h"
 #include "context/cdlist.h"
 #include "expr/node_trie.h"
+#include "theory/quantifiers/ccfv_sat.h"
 #include "theory/quantifiers/inst_match.h"
 #include "theory/quantifiers/quant_module.h"
 
@@ -213,6 +214,10 @@ class QuantConflictFind : public QuantifiersModule
 {
   friend class MatchGen;
   friend class QuantInfo;
+
+ private:
+  // For CCFV reasoning
+  std::unique_ptr<CcfvSatEngine> d_ccfvEngine;
 
  public:
   QuantConflictFind(Env& env,

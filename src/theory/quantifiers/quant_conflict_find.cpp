@@ -2513,6 +2513,10 @@ QuantConflictFind::QuantConflictFind(Env& env,
       d_statistics(statisticsRegistry()),
       d_effort(EFFORT_INVALID)
 {
+  if (options().quantifiers.ccfvSat)
+  {
+    d_ccfvEngine = std::make_unique<CcfvSatEngine>(env, qs, tr);
+  }
 }
 
 //-------------------------------------------------- registration
@@ -2750,6 +2754,67 @@ void QuantConflictFind::checkQuantifiedFormula(Node q,
     Trace("qcf-check") << " : " << q << "..." << std::endl;
   }
 
+  Instantiate* qinst = d_qim.getInstantiate();
+
+  std::cout << "[QCF] Quantified formula:\n  " << q << std::endl;
+  std::cout << "[QCF] Effort: "
+            << (d_effort == EFFORT_CONFLICT ? "CONFLICT" : "PROP") << std::endl;
+
+  // CCFV SAT-encoded call
+  // Should be called only when EFFORT is CONFLICT
+  if (options().quantifiers.ccfvSat)
+  {
+    if (d_effort != EFFORT_CONFLICT) return;
+
+    // Computing L
+    // Check if this is right
+    Node negBody = rewrite(q[1].negate());
+    std::vector<Node> L;
+    if (negBody.getKind() == Kind::AND)
+    {
+      for (const Node& lit : negBody)
+      {
+        L.push_back(lit);
+      }
+    }
+    else
+    {
+      L.push_back(negBody);
+    }
+
+    std::vector<std::vector<Node>> substitutions;
+    if (d_ccfvEngine->findSubstitutions(q, L, substitutions))
+    {
+      InferenceId id = InferenceId::QUANTIFIERS_INST_CBQI_CONFLICT;
+      for (std::vector<Node>& terms : substitutions)
+      {
+        // Ensure every variable in q[0] received a term
+        Assert(terms.size() == q[0].getNumChildren());
+        // Everything beneath is the default behavior of cvc5 when a
+        // substitution is found Send the substitution to cvc5's lemma generator
+        if (qinst->addInstantiation(q, terms, id))
+        {
+          ++addedLemmas;
+          // Priorize q on the next round
+          d_treg.getModel()->markRelevant(q);
+          // Notify conflict
+          if (options().quantifiers.cbqiAllConflict)
+          {
+            isConflict = true;
+          }
+          else
+          {
+            // Stop on the first conflicting instance
+            d_qstate.notifyConflictingInst();
+            return;
+          }
+        }
+      }
+    }
+
+    return;
+  }
+
   Trace("qcf-check-debug") << "Reset round..." << std::endl;
   if (!qi->reset_round())
   {
@@ -2759,9 +2824,9 @@ void QuantConflictFind::checkQuantifiedFormula(Node q,
   }
   // try to make a matches making the body false or propagating
   Trace("qcf-check-debug") << "Get next match..." << std::endl;
-  Instantiate* qinst = d_qim.getInstantiate();
   while (qi->getNextMatch())
   {
+    std::cout << "[QCF] qi->getNextMatch() returned TRUE" << std::endl;
     if (d_qstate.isInConflict())
     {
       Trace("qcf-check") << "   ... Quantifiers engine discovered conflict, ";
