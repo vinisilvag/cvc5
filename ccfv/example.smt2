@@ -1,3 +1,6 @@
+;; Go to the build folder and run
+;;   ./bin/cvc5 --ccfv-sat --no-var-elim-quant --dump-instantiations ../ccfv/example.smt2
+
 (set-logic UF)
 
 (declare-sort U 0)

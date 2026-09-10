@@ -2826,7 +2826,6 @@ void QuantConflictFind::checkQuantifiedFormula(Node q,
   Trace("qcf-check-debug") << "Get next match..." << std::endl;
   while (qi->getNextMatch())
   {
-    std::cout << "[QCF] qi->getNextMatch() returned TRUE" << std::endl;
     if (d_qstate.isInConflict())
     {
       Trace("qcf-check") << "   ... Quantifiers engine discovered conflict, ";

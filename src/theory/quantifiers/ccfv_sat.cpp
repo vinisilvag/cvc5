@@ -76,7 +76,7 @@ bool CcfvSatEngine::findSubstitutions(
 
   std::cout << "[CcfvSatEngine] Calling SAT solver" << std::endl;
   // Call solver
-  //
+
   std::cout << "[CcfvSatEngine] Retrieving model" << std::endl;
   // Get model
 
