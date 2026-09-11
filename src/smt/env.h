@@ -148,6 +148,9 @@ class Env
   /** Get the logic information currently set. */
   const LogicInfo& getLogicInfo() const;
 
+  /** Set the logic information (e.g. narrowed during preprocessing) */
+  void setLogicInfo(const LogicInfo& logic);
+
   /** Get a pointer to the StatisticsRegistry. */
   StatisticsRegistry& getStatisticsRegistry();
 

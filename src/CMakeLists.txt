@@ -95,6 +95,8 @@ libcvc5_add_sources(
   preprocessing/passes/ite_simp.h
   preprocessing/passes/learned_rewrite.cpp
   preprocessing/passes/learned_rewrite.h
+  preprocessing/passes/minimal_logic_detection.cpp
+  preprocessing/passes/minimal_logic_detection.h
   preprocessing/passes/miplib_trick.cpp
   preprocessing/passes/miplib_trick.h
   preprocessing/passes/nl_ext_purify.cpp

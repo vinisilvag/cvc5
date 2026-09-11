@@ -41,6 +41,7 @@
 #include "preprocessing/passes/ite_removal.h"
 #include "preprocessing/passes/ite_simp.h"
 #include "preprocessing/passes/learned_rewrite.h"
+#include "preprocessing/passes/minimal_logic_detection.h"
 #include "preprocessing/passes/miplib_trick.h"
 #include "preprocessing/passes/nl_ext_purify.h"
 #include "preprocessing/passes/non_clausal_simp.h"
@@ -161,6 +162,7 @@ PreprocessingPassRegistry::PreprocessingPassRegistry()
   registerPassInfo("static-rewrite", callCtor<StaticRewrite>);
   registerPassInfo("strings-eager-pp", callCtor<StringsEagerPp>);
   registerPassInfo("normalize", callCtor<Normalize>);
+  registerPassInfo("minimal-logic-detection", callCtor<MinimalLogicDetection>);
 }
 
 }  // namespace preprocessing

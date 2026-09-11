@@ -145,6 +145,8 @@ theory::TrustSubstitutionMap& Env::getTopLevelSubstitutions()
 
 const LogicInfo& Env::getLogicInfo() const { return d_logic; }
 
+void Env::setLogicInfo(const LogicInfo& logic) { d_logic = logic; }
+
 StatisticsRegistry& Env::getStatisticsRegistry()
 {
   return *d_statisticsRegistry;

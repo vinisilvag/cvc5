@@ -234,6 +234,15 @@ bool ProcessAssertions::apply(AssertionPipeline& ap)
   // Assertions MUST BE guaranteed to be rewritten by this point
   applyPass("rewrite", ap);
 
+  // Applying Minimal Logic Detection eagerly and only when the default logic is
+  // ALL or QF_ALL
+  if (options().smt.minimalLogicDetection)
+  {
+    const std::string& logic = logicInfo().getLogicString();
+    if (logic == "ALL" || logic == "QF_ALL")
+      applyPass("minimal-logic-detection", ap);
+  }
+
   // Convert non-top-level Booleans to bit-vectors of size 1
   if (options().bv.boolToBitvector != options::BoolToBVMode::OFF)
   {
