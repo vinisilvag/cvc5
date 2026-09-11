@@ -20,6 +20,8 @@
 #include "preprocessing/assertion_pipeline.h"
 #include "preprocessing/preprocessing_pass_context.h"
 #include "smt/env.h"
+#include "theory/arith/arith_utilities.h"
+#include "theory/arith/nl/poly_conversion.h"
 
 using namespace std;
 using namespace cvc5::internal::kind;
@@ -43,6 +45,12 @@ struct InputLogic
   bool hasIntegers = false;
   bool hasReals = false;
   bool isNonlinear = false;
+  bool hasSets = false;
+  bool hasBags = false;
+  bool hasFP = false;
+  bool hasFF = false;
+  bool hasSep = false;
+  bool hasTranscendentals = false;
 };
 
 MinimalLogicDetection::MinimalLogicDetection(
@@ -92,6 +100,22 @@ PreprocessingPassResult MinimalLogicDetection::applyInternal(
         || k == Kind::INTS_MODULUS)
       if (!cur[1].isConst()) logic.isNonlinear = true;
 
+    if (k == Kind::SEP_PTO || k == Kind::SEP_STAR || k == Kind::SEP_WAND
+        || k == Kind::SEP_EMP || k == Kind::SEP_NIL)
+      logic.hasSep = true;
+
+    if (theory::arith::isTranscendentalKind(k))
+    {
+      logic.hasTranscendentals = true;
+      logic.isNonlinear = true;
+    }
+
+    if (k == Kind::DIVISION || k == Kind::INTS_DIVISION
+        || k == Kind::INTS_MODULUS)
+      if (!cur[1].isConst()
+          || (cur[1].isConst() && cur[1].getConst<Rational>().isZero()))
+        logic.isNonlinear = true;
+
     if (tn.isBitVector())
       logic.hasBV = true;
     else if (tn.isArray())
@@ -104,10 +128,24 @@ PreprocessingPassResult MinimalLogicDetection::applyInternal(
       logic.hasIntegers = true;
     else if (tn.isReal())
       logic.hasReals = true;
+    else if (tn.isSet())
+      logic.hasSets = true;
+    else if (tn.isBag())
+      logic.hasBags = true;
+    else if (tn.isFloatingPoint() || tn.isRoundingMode())
+      logic.hasFP = true;
+    else if (tn.isFiniteField())
+      logic.hasFF = true;
 
     // Push all children of the current node in the AST onto the stack
     visit.insert(visit.end(), cur.begin(), cur.end());
   }
+
+  if (logic.hasArrays || logic.hasDatatypes || logic.hasSets || logic.hasBags
+      || logic.hasFP || logic.hasStrings || logic.isNonlinear
+      || (logic.hasIntegers && logic.hasBV))
+    logic.hasUF = true;
+
   // Construct a fresh, unlocked LogicInfo and enable theories based on what
   // was found in the traversal
   LogicInfo detected = LogicInfo("").getUnlockedCopy();
@@ -128,6 +166,12 @@ PreprocessingPassResult MinimalLogicDetection::applyInternal(
     else
       detected.arithOnlyLinear();
   }
+  if (logic.hasFP) detected.enableTheory(theory::THEORY_FP);
+  if (logic.hasSets) detected.enableTheory(theory::THEORY_SETS);
+  if (logic.hasBags) detected.enableTheory(theory::THEORY_BAGS);
+  if (logic.hasFF) detected.enableTheory(theory::THEORY_FF);
+  if (logic.hasSep) detected.enableSeparationLogic();
+  if (logic.hasTranscendentals) detected.arithTranscendentals();
 
   // Lock the detected logic and update the environment
   detected.lock();
