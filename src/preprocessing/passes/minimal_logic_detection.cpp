@@ -21,7 +21,6 @@
 #include "preprocessing/preprocessing_pass_context.h"
 #include "smt/env.h"
 #include "theory/arith/arith_utilities.h"
-#include "theory/arith/nl/poly_conversion.h"
 
 using namespace std;
 using namespace cvc5::internal::kind;
@@ -93,28 +92,26 @@ PreprocessingPassResult MinimalLogicDetection::applyInternal(
         if (!child.isConst()) nonConstCount++;
       if (nonConstCount > 1) logic.isNonlinear = true;
     }
-
-    // Division or modulus by a non-constant denominator makes the problem
-    // non-linear
-    if (k == Kind::DIVISION || k == Kind::INTS_DIVISION
-        || k == Kind::INTS_MODULUS)
-      if (!cur[1].isConst()) logic.isNonlinear = true;
-
-    if (k == Kind::SEP_PTO || k == Kind::SEP_STAR || k == Kind::SEP_WAND
-        || k == Kind::SEP_EMP || k == Kind::SEP_NIL)
-      logic.hasSep = true;
-
-    if (theory::arith::isTranscendentalKind(k))
+    else if (k == Kind::DIVISION || k == Kind::INTS_DIVISION
+             || k == Kind::INTS_MODULUS)
+    {
+      // Division or modulus by a non-constant or zero denominator makes the
+      // problem non-linear
+      if (!cur[1].isConst() || cur[1].getConst<Rational>().isZero())
+        logic.isNonlinear = true;
+    }
+    else if (theory::arith::isExtendedNonLinearKind(k))
+    {
+      logic.isNonlinear = true;
+    }
+    else if (theory::arith::isTranscendentalKind(k))
     {
       logic.hasTranscendentals = true;
       logic.isNonlinear = true;
     }
-
-    if (k == Kind::DIVISION || k == Kind::INTS_DIVISION
-        || k == Kind::INTS_MODULUS)
-      if (!cur[1].isConst()
-          || (cur[1].isConst() && cur[1].getConst<Rational>().isZero()))
-        logic.isNonlinear = true;
+    else if (k == Kind::SEP_PTO || k == Kind::SEP_STAR || k == Kind::SEP_WAND
+             || k == Kind::SEP_EMP || k == Kind::SEP_NIL)
+      logic.hasSep = true;
 
     if (tn.isBitVector())
       logic.hasBV = true;
