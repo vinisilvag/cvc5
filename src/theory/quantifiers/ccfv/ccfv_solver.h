@@ -51,13 +51,13 @@ class CcfvSolver : protected EnvObj
   bool solveProcedural(const std::vector<Node>& vars,
                        const std::vector<Node>& lits,
                        eq::EqualityEngine* ee,
-                       std::vector<std::vector<Node>>& solutions);
+                       std::vector<std::vector<Node>>& substitutions);
 
   /** Solves using the SAT encoding procedure. */
   bool solveSat(const std::vector<Node>& vars,
                 const std::vector<Node>& lits,
                 eq::EqualityEngine* ee,
-                std::vector<std::vector<Node>>& solutions);
+                std::vector<std::vector<Node>>& substitutions);
 };
 
 }  // namespace quantifiers
