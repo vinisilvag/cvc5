@@ -33,7 +33,7 @@ class CcfvSolver : protected EnvObj
    * such that E |= L sigma.
    *
    * @param mode Whether to use the decision procedure or SAT encoding.
-   * @param vars The free variables in L (the quantified variables).
+   * @param freeVars The free variables in L (the quantified variables).
    * @param lits The set of equational literals L to satisfy.
    * @param ee The equality engine representing the ground context E.
    * @param substitutions Output: vector of solutions, where each solution is a
@@ -41,20 +41,20 @@ class CcfvSolver : protected EnvObj
    * @return True if at least one solution was found, false otherwise.
    */
   bool solve(options::CcfvMode mode,
-             const std::vector<Node>& vars,
+             const std::vector<Node>& freeVars,
              const std::vector<Node>& lits,
              eq::EqualityEngine* ee,
              std::vector<std::vector<Node>>& substitutions);
 
  private:
   /** Solves using the decision procedure. */
-  bool solveProcedural(const std::vector<Node>& vars,
+  bool solveProcedural(const std::vector<Node>& freeVars,
                        const std::vector<Node>& lits,
                        eq::EqualityEngine* ee,
                        std::vector<std::vector<Node>>& substitutions);
 
   /** Solves using the SAT encoding procedure. */
-  bool solveSat(const std::vector<Node>& vars,
+  bool solveSat(const std::vector<Node>& freeVars,
                 const std::vector<Node>& lits,
                 eq::EqualityEngine* ee,
                 std::vector<std::vector<Node>>& substitutions);

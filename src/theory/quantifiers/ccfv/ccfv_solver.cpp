@@ -10,17 +10,17 @@ namespace quantifiers {
 CcfvSolver::CcfvSolver(Env& env) : EnvObj(env) {}
 
 bool CcfvSolver::solve(options::CcfvMode mode,
-                       const std::vector<Node>& vars,
+                       const std::vector<Node>& freeVars,
                        const std::vector<Node>& lits,
                        eq::EqualityEngine* ee,
                        std::vector<std::vector<Node>>& substitutions)
 {
-  Trace("ccfv-solver") << "CcfvSolver::solve: " << vars.size()
+  Trace("ccfv-solver") << "CcfvSolver::solve: " << freeVars.size()
                        << " free vars, " << lits.size() << " literals in L"
                        << std::endl;
   if (TraceIsOn("ccfv-solver-debug"))
   {
-    Trace("ccfv-solver-debug") << "  Vars: " << vars << std::endl;
+    Trace("ccfv-solver-debug") << "  Vars: " << freeVars << std::endl;
     Trace("ccfv-solver-debug") << "  L: " << lits << std::endl;
   }
 
@@ -28,18 +28,18 @@ bool CcfvSolver::solve(options::CcfvMode mode,
   {
     Trace("ccfv-solver") << "  Dispatching to: Decision Procedure backend"
                          << std::endl;
-    return solveProcedural(vars, lits, ee, substitutions);
+    return solveProcedural(freeVars, lits, ee, substitutions);
   }
   else if (mode == options::CcfvMode::SAT)
   {
     Trace("ccfv-solver") << "  Dispatching to: SAT Encoding backend"
                          << std::endl;
-    return solveSat(vars, lits, ee, substitutions);
+    return solveSat(freeVars, lits, ee, substitutions);
   }
   return false;
 }
 
-bool CcfvSolver::solveProcedural(const std::vector<Node>& vars,
+bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
                                  const std::vector<Node>& lits,
                                  eq::EqualityEngine* ee,
                                  std::vector<std::vector<Node>>& substitutions)
@@ -48,7 +48,7 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& vars,
   return false;
 }
 
-bool CcfvSolver::solveSat(const std::vector<Node>& vars,
+bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
                           const std::vector<Node>& lits,
                           eq::EqualityEngine* ee,
                           std::vector<std::vector<Node>>& solutions)
