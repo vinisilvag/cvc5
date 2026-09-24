@@ -237,9 +237,27 @@ void CcfvEngine::checkTriggerInst(Theory::Effort level)
       continue;
     }
 
+    uint64_t totalComb = 1;
+    for (size_t j = 0; j < patTerms.size(); ++j)
+    {
+      totalComb *= candidates[j].size();
+    }
+    Trace("ccfv") << "CcfvEngine: Trigger Cartesian product has " << totalComb
+                  << " combination(s)" << std::endl;
+
     NodeManager* nm = nodeManager();
     while (true)
     {
+      if (TraceIsOn("ccfv-debug"))
+      {
+        Trace("ccfv-debug") << "  Testing combination indices: [";
+        for (size_t idx : indices)
+        {
+          Trace("ccfv-debug") << " " << idx;
+        }
+        Trace("ccfv-debug") << " ]" << std::endl;
+      }
+
       std::vector<Node> L;
       for (size_t k = 0; k < patTerms.size(); ++k)
       {
@@ -268,30 +286,29 @@ void CcfvEngine::checkTriggerInst(Theory::Effort level)
       }
       else
       {
-        Trace("ccfv-debug")
-            << "  No relevant instance (triggered-based "
-               "instance) found. Trying other combination for L."
-            << std::endl;
-        int p = static_cast<int>(patTerms.size()) - 1;
-        while (p >= 0)
+        Trace("ccfv-debug") << "  No relevant instance found for this L. "
+                               "Trying next combination."
+                            << std::endl;
+      }
+
+      int p = static_cast<int>(patTerms.size()) - 1;
+      while (p >= 0)
+      {
+        indices[p]++;
+        if (indices[p] < candidates[p].size())
         {
-          indices[p]++;
-          if (indices[p] < candidates[p].size())
-          {
-            break;
-          }
-          else
-          {
-            indices[p] = 0;
-            p--;
-          }
-        }
-        if (p < 0)
-        {
-          Trace("ccfv-debug")
-              << "  Combinations for L are exausted." << std::endl;
           break;
         }
+        else
+        {
+          indices[p] = 0;
+          p--;
+        }
+      }
+      if (p < 0)
+      {
+        Trace("ccfv-debug") << "  Cartesian product exhausted." << std::endl;
+        break;
       }
     }
 
