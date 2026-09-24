@@ -1507,14 +1507,11 @@ void SetDefaults::widenLogic(LogicInfo& logic, const Options& opts) const
 void SetDefaults::setDefaultsQuantifiers(const LogicInfo& logic,
                                          Options& opts) const
 {
-  // NOTE: maybe I will want to disable all other quantifier instatiations
-  // techniques
-  if (opts.quantifiers.ccfv)
+  if (opts.quantifiers.ccfvModeWasSetByUser)
   {
     // Disable cvc5's default conflict-based and e-matching engines
-    SET_AND_NOTIFY_IF_NOT_USER(
-        quantifiers, conflictBasedInst, false, "myCustomInst");
-    SET_AND_NOTIFY_IF_NOT_USER(quantifiers, eMatching, false, "myCustomInst");
+    SET_AND_NOTIFY_IF_NOT_USER(quantifiers, conflictBasedInst, false, "ccfv");
+    SET_AND_NOTIFY_IF_NOT_USER(quantifiers, eMatching, false, "ccfv");
   }
 
   if (opts.quantifiers.fullSaturateQuant)

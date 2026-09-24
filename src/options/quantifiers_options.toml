@@ -1929,11 +1929,20 @@ name   = "Quantifiers"
   name = "interleave"
   help = "add instantiation and evaluation unfolding lemmas in the same step."
 
-# Base to CCFV decision procedure and CCFV SAT-encoded
+# CCFV options
 [[option]]
-  name       = "ccfv"
+  name       = "ccfvMode"
   category   = "regular"
-  long       = "ccfv"
-  type       = "bool"
-  default    = "false"
-  help       = "use custom implementations of conflict- and trigger-based instantiation"
+  long       = "ccfv=MODE"
+  type       = "CcfvMode"
+  default    = "DECISION"
+  help       = "mode for Congruence Closure with Free Variables (CCFV) quantifier instantiation"
+  help_mode  = "CCFV quantifier instantiation modes."
+[[option.mode.DECISION]]
+  name = "decision"
+  help = "Use CCFV decision procedure directly (calculus/backtracking search)."
+[[option.mode.SAT]]
+  name = "sat"
+  help = "Use CCFV via SAT encoding."
+
+

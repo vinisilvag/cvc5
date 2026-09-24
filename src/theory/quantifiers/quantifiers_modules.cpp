@@ -48,9 +48,9 @@ void QuantifiersModules::initialize(Env& env,
 {
   // add quantifiers modules
   const Options& options = env.getOptions();
-  if (options.quantifiers.ccfv)
+  if (options.quantifiers.ccfvModeWasSetByUser)
   {
-    d_ccfv.reset(new CcfvInst(env, qs, qim, qr, tr));
+    d_ccfv.reset(new CcfvEngine(env, qs, qim, qr, tr));
     modules.push_back(d_ccfv.get());
   }
   if (options.quantifiers.conflictBasedInst)
