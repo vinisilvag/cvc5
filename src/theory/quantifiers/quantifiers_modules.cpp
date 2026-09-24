@@ -48,6 +48,11 @@ void QuantifiersModules::initialize(Env& env,
 {
   // add quantifiers modules
   const Options& options = env.getOptions();
+  if (options.quantifiers.ccfv)
+  {
+    d_ccfv.reset(new CcfvInst(env, qs, qim, qr, tr));
+    modules.push_back(d_ccfv.get());
+  }
   if (options.quantifiers.conflictBasedInst)
   {
     d_qcf.reset(new QuantConflictFind(env, qs, qim, qr, tr));

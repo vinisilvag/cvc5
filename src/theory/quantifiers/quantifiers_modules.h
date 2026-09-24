@@ -16,6 +16,7 @@
 #define CVC5__THEORY__QUANTIFIERS__QUANTIFIERS_MODULES_H
 
 #include "theory/quantifiers/alpha_equivalence.h"
+#include "theory/quantifiers/ccfv/ccfv_inst.h"
 #include "theory/quantifiers/conjecture_generator.h"
 #include "theory/quantifiers/ematching/instantiation_engine.h"
 #include "theory/quantifiers/fmf/bounded_integers.h"
@@ -99,6 +100,8 @@ class QuantifiersModules
   std::unique_ptr<SygusInst> d_sygus_inst;
   /** model-based quantifier instantiation */
   std::unique_ptr<InstStrategyMbqi> d_mbqi;
+  /** My custom instantiation module */
+  std::unique_ptr<CcfvInst> d_ccfv;
   /** Oracle engine */
   std::unique_ptr<OracleEngine> d_oracleEngine;
 };
