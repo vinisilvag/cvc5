@@ -30,9 +30,6 @@ class CcfvEngine : public QuantifiersModule
   /** Decides at what effort level this module needs a model to be built */
   QEffort needsModel(Theory::Effort level) override;
 
-  /** Called at the beginning of each check round */
-  void reset_round(Theory::Effort level) override;
-
   /** Core check function called at each quantifier effort level */
   void check(Theory::Effort level, QEffort quant_e) override;
 

@@ -41,11 +41,6 @@ QuantifiersModule::QEffort CcfvEngine::needsModel(
   return QEFFORT_MODEL;
 }
 
-void CcfvEngine::reset_round(Theory::Effort level)
-{
-  // Reset per-round data structures
-}
-
 void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
 {
   Trace("ccfv") << "CcfvEngine::check at level " << level << ", effort "
