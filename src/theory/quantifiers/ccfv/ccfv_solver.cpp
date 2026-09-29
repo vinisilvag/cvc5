@@ -1,3 +1,16 @@
+/******************************************************************************
+ * This file is part of the cvc5 project.
+ *
+ * Copyright (c) 2009-2026 by the authors listed in the file AUTHORS
+ * in the top-level source directory and their institutional affiliations.
+ * All rights reserved.  See the file COPYING in the top-level source
+ * directory for licensing information.
+ * ****************************************************************************
+ *
+ * Implementation of Congruence Closure with Free Variables (CCFV) solver for
+ * E-ground (dis)unification.
+ */
+
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
 
 #include "base/output.h"

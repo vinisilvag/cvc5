@@ -1,3 +1,16 @@
+/******************************************************************************
+ * This file is part of the cvc5 project.
+ *
+ * Copyright (c) 2009-2026 by the authors listed in the file AUTHORS
+ * in the top-level source directory and their institutional affiliations.
+ * All rights reserved.  See the file COPYING in the top-level source
+ * directory for licensing information.
+ * ****************************************************************************
+ *
+ * Congruence Closure with Free Variables (CCFV) solver for E-ground
+ * (dis)unification.
+ */
+
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 
@@ -18,9 +31,15 @@ namespace quantifiers {
 
 /**
  * Solver for E-ground (dis)unification using Congruence Closure with Free
- * Variables (CCFV). Supports both:
- * 1. Decision procedure (backtracking/Breadth-first search over the E-graph)
- * 2. SAT-encoded procedure (reduction to SAT via propositional encoding)
+ * Variables (CCFV).
+ *
+ * Given a set of equational literals L containing free variables and an equality
+ * engine E (representing ground equalities/disequalities), CCFV solves the
+ * problem of finding substitutions sigma such that E |= L sigma.
+ *
+ * Supports two backend solving modes:
+ * 1. Procedural decision procedure (backtracking search over the E-graph)
+ * 2. SAT-encoded procedure (reduction to propositional SAT)
  */
 class CcfvSolver : protected EnvObj
 {

@@ -1,3 +1,16 @@
+/******************************************************************************
+ * This file is part of the cvc5 project.
+ *
+ * Copyright (c) 2009-2026 by the authors listed in the file AUTHORS
+ * in the top-level source directory and their institutional affiliations.
+ * All rights reserved.  See the file COPYING in the top-level source
+ * directory for licensing information.
+ * ****************************************************************************
+ *
+ * Congruence Closure with Free Variables (CCFV) quantifier instantiation
+ * engine.
+ */
+
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_ENGINE_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_ENGINE_H
 
@@ -11,6 +24,19 @@ namespace quantifiers {
 
 class CcfvSolver;
 
+/**
+ * Congruence Closure with Free Variables (CCFV) instantiation engine.
+ *
+ * This class is a QuantifiersModule that drives quantifier instantiation
+ * using CCFV-based E-ground (dis)unification. It manages:
+ * - Conflict-based instantiation (at QEFFORT_CONFLICT): attempts to find
+ *   substitutions that falsify the body of asserted quantified formulas under
+ *   the current equality engine E.
+ * - Trigger-based instantiation (at QEFFORT_STANDARD): solves matching
+ *   equations between selected pattern terms and candidate ground terms in E.
+ * - Model-based instantiation (at QEFFORT_MODEL): checks whether candidate
+ *   models satisfy the asserted quantifiers.
+ */
 class CcfvEngine : public QuantifiersModule
 {
  public:
