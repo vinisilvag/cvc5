@@ -47,9 +47,6 @@ class CcfvEngine : public QuantifiersModule
              TermRegistry& tr);
   ~CcfvEngine() override;
 
-  /** Called when a new quantifier is registered */
-  void registerQuantifier(Node q) override;
-
   /** Decides when cvc5 should call this module */
   bool needsCheck(Theory::Effort level) override;
 

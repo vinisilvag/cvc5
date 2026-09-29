@@ -1,3 +1,4 @@
+;; ./build/bin/cvc5 --ccfv=decision -t ccfv -t ccfv-debug -t ccfv-solver ccfv-examples/test-cbqi.smt2
 (set-logic UF)
 (declare-sort U 0)
 
