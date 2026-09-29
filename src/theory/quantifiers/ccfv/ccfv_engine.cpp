@@ -25,6 +25,46 @@ namespace cvc5::internal {
 namespace theory {
 namespace quantifiers {
 
+bool isClause(Node n)
+{
+  if (QuantifiersRewriter::isLiteral(n) || n.isConst())
+  {
+    return true;
+  }
+  if (n.getKind() == Kind::OR)
+  {
+    for (const Node& child : n)
+    {
+      if (!QuantifiersRewriter::isLiteral(child) && !child.isConst())
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+bool isCNF(Node n)
+{
+  if (isClause(n))
+  {
+    return true;
+  }
+  if (n.getKind() == Kind::AND)
+  {
+    for (const Node& child : n)
+    {
+      if (!isClause(child))
+      {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
 CcfvEngine::CcfvEngine(Env& env,
                        QuantifiersState& qs,
                        QuantifiersInferenceManager& qim,
@@ -87,6 +127,9 @@ void CcfvEngine::checkConflictInst(Theory::Effort level)
     {
       continue;
     }
+
+    // Temporary: check if every q is indeed in CNF
+    Assert(isCNF(q));
 
     Trace("ccfv-debug") << "CcfvEngine: Checking quantifier: " << q
                         << std::endl;
