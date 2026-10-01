@@ -52,13 +52,15 @@ bool CcfvSolver::solve(options::CcfvMode mode,
   return false;
 }
 
+std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec() {}
+
 bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
                                  const std::vector<Node>& lits,
                                  eq::EqualityEngine* ee,
                                  std::vector<std::vector<Node>>& substitutions)
 {
-  // TODO: Implement CCFV Decision Procedure
-  return false;
+  substitutions = solveProceduralRec();
+  return !substitutions.empty();
 }
 
 bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
