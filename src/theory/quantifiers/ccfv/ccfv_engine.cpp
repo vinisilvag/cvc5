@@ -15,6 +15,7 @@
 
 #include "base/output.h"
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
+#include "theory/quantifiers/ccfv/ccfv_utils.h"
 #include "theory/quantifiers/ematching/pattern_term_selector.h"
 #include "theory/quantifiers/first_order_model.h"
 #include "theory/quantifiers/instantiate.h"
@@ -24,46 +25,6 @@
 namespace cvc5::internal {
 namespace theory {
 namespace quantifiers {
-
-bool isClause(Node n)
-{
-  if (QuantifiersRewriter::isLiteral(n) || n.isConst())
-  {
-    return true;
-  }
-  if (n.getKind() == Kind::OR)
-  {
-    for (const Node& child : n)
-    {
-      if (!QuantifiersRewriter::isLiteral(child) && !child.isConst())
-      {
-        return false;
-      }
-    }
-    return true;
-  }
-  return false;
-}
-
-bool isCNF(Node n)
-{
-  if (isClause(n))
-  {
-    return true;
-  }
-  if (n.getKind() == Kind::AND)
-  {
-    for (const Node& child : n)
-    {
-      if (!isClause(child))
-      {
-        return false;
-      }
-    }
-    return true;
-  }
-  return false;
-}
 
 CcfvEngine::CcfvEngine(Env& env,
                        QuantifiersState& qs,
@@ -130,8 +91,8 @@ void CcfvEngine::checkConflictInst(Theory::Effort level)
       continue;
     }
 
-    // Temporary: check if every q is indeed in CNF
-    Assert(isCNF(q));
+    // Ensure q is in CNF
+    Assert(ccfv::isCnf(q));
 
     Trace("ccfv-debug") << "CcfvEngine: Checking quantifier: " << q
                         << std::endl;
