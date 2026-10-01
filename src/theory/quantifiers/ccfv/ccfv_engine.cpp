@@ -99,10 +99,12 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
   }
   else if (quant_e == QEFFORT_STANDARD)
   {
+    return;
     checkTriggerInst(level);
   }
   else if (quant_e == QEFFORT_MODEL)
   {
+    return;
     checkModelInst(level);
   }
 }

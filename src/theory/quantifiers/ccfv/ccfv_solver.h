@@ -33,9 +33,9 @@ namespace quantifiers {
  * Solver for E-ground (dis)unification using Congruence Closure with Free
  * Variables (CCFV).
  *
- * Given a set of equational literals L containing free variables and an equality
- * engine E (representing ground equalities/disequalities), CCFV solves the
- * problem of finding substitutions sigma such that E |= L sigma.
+ * Given a set of equational literals L containing free variables and an
+ * equality engine E (representing ground equalities/disequalities), CCFV solves
+ * the problem of finding substitutions sigma such that E |= L sigma.
  *
  * Supports two backend solving modes:
  * 1. Procedural decision procedure (backtracking search over the E-graph)
@@ -66,6 +66,11 @@ class CcfvSolver : protected EnvObj
              std::vector<std::vector<Node>>& substitutions);
 
  private:
+  std::vector<std::vector<Node>> solveProceduralRec(
+      const std::vector<Node> lits,
+      eq::EqualityEngine* ee,
+      std::vector<std::vector<Node>> substitutions);
+
   /** Solves using the decision procedure. */
   bool solveProcedural(const std::vector<Node>& freeVars,
                        const std::vector<Node>& lits,

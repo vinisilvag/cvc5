@@ -52,13 +52,65 @@ bool CcfvSolver::solve(options::CcfvMode mode,
   return false;
 }
 
+// TODO: check those empty returns
+std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
+    const std::vector<Node> lits,
+    eq::EqualityEngine* ee,
+    std::vector<std::vector<Node>> substitutions)
+{
+  if (lits.empty())
+  {
+    return substitutions;
+  }
+
+  // TODO: apply more sophisticated selection
+  Node c = lits.front();
+  std::vector<Node> newLits(lits.begin() + 1, lits.end());
+
+  Trace("ccfv") << "  CcfvEngine: Processing " << c << std::endl;
+  Trace("ccfv") << "  CcfvEngine: Remaining L " << newLits << std::endl;
+
+  switch (c.getKind())
+  {
+    case Kind::EQUAL:
+    {
+      Node l = c[0], r = c[1];
+
+      // Syntactic equality
+      if (l == r)
+      {
+        return solveProceduralRec(newLits, ee, substitutions);
+      }
+
+      break;
+    }
+    case Kind::NOT:
+    {
+      if (c[0].getKind() != Kind::EQUAL)
+      {
+        return {};
+      }
+
+      Node l = c[0], r = c[1];
+
+      break;
+    }
+    default:
+    {
+      return {};
+    }
+  }
+
+  return {};
+}
+
 bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
                                  const std::vector<Node>& lits,
                                  eq::EqualityEngine* ee,
                                  std::vector<std::vector<Node>>& substitutions)
 {
-  // TODO: Implement CCFV Decision Procedure
-  return false;
+  substitutions = solveProceduralRec(lits, ee, {});
+  return !substitutions.empty();
 }
 
 bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
