@@ -60,12 +60,13 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
 {
   if (lits.empty())
   {
-    return substitutions;
+    return {substitutions};
   }
 
   // TODO: apply more sophisticated selection
   Node c = lits.front();
   std::vector<Node> newLits(lits.begin() + 1, lits.end());
+  std::vector<std::vector<Node>> sols;
 
   Trace("ccfv") << "  CcfvEngine: Processing " << c << std::endl;
   Trace("ccfv") << "  CcfvEngine: Remaining L " << newLits << std::endl;
@@ -82,26 +83,29 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
         return solveProceduralRec(newLits, ee, substitutions);
       }
 
+      // Ground equality
+
+      // Assignmnet
+
       break;
     }
     case Kind::NOT:
     {
-      if (c[0].getKind() != Kind::EQUAL)
-      {
-        return {};
-      }
+      if (c[0].getKind() != Kind::EQUAL) return {};
 
-      Node l = c[0], r = c[1];
+      Node eq = c[0];
+      Node l = eq[0], r = eq[1];
+
+      // Ground disequality
+
+      // Assignment into a disequal term
 
       break;
     }
-    default:
-    {
-      return {};
-    }
+    default: return {};
   }
 
-  return {};
+  return sols;
 }
 
 bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,

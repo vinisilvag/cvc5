@@ -13,6 +13,8 @@ std::vector<Node> toCnf(NodeManager* nm, Node body)
   // Distributive
 }
 
+CcfvIndices::CcfvIndices(eq::EqualityEngine* ee) {}
+
 }  // namespace ccfv
 }  // namespace quantifiers
 }  // namespace theory

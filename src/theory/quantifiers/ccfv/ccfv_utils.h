@@ -20,6 +20,11 @@
 
 namespace cvc5::internal {
 namespace theory {
+
+namespace eq {
+class EqualityEngine;
+}
+
 namespace quantifiers {
 namespace ccfv {
 
@@ -54,6 +59,15 @@ inline bool isCnf(Node n)
 }
 
 std::vector<Node> toCnf(NodeManager* nm, Node body);
+
+// TODO: implement it later
+class CcfvIndices
+{
+ public:
+  CcfvIndices(eq::EqualityEngine* ee);
+
+ private:
+};
 
 }  // namespace ccfv
 }  // namespace quantifiers
