@@ -65,6 +65,9 @@ class CcfvIndices
 {
  public:
   CcfvIndices(eq::EqualityEngine* ee);
+  std::vector<Node> getDiseqs(Node t);
+  std::vector<Node> getReps(Node f);
+  std::vector<Node> getApps(Node f, Node t);
 
  private:
 };

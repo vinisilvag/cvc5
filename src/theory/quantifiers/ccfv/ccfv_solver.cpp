@@ -14,6 +14,7 @@
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
 
 #include "base/output.h"
+#include "expr/node_algorithm.h"
 #include "theory/uf/equality_engine.h"
 
 namespace cvc5::internal {
@@ -63,7 +64,7 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
     return {substitutions};
   }
 
-  // TODO: apply more sophisticated selection
+  // TODO: apply more sophisticated selection later
   Node c = lits.front();
   std::vector<Node> newLits(lits.begin() + 1, lits.end());
   std::vector<std::vector<Node>> sols;
@@ -84,6 +85,10 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       }
 
       // Ground equality
+      bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
+      if (lIsGround && rIsGround)
+      {
+      }
 
       // Assignmnet
 
@@ -97,6 +102,10 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       Node l = eq[0], r = eq[1];
 
       // Ground disequality
+      bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
+      if (lIsGround && rIsGround)
+      {
+      }
 
       // Assignment into a disequal term
 

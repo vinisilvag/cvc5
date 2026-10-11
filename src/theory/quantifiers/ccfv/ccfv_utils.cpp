@@ -15,6 +15,12 @@ std::vector<Node> toCnf(NodeManager* nm, Node body)
 
 CcfvIndices::CcfvIndices(eq::EqualityEngine* ee) {}
 
+std::vector<Node> CcfvIndices::getDiseqs(Node t) { return {}; }
+
+std::vector<Node> CcfvIndices::getReps(Node f) { return {}; }
+
+std::vector<Node> CcfvIndices::getApps(Node f, Node t) { return {}; }
+
 }  // namespace ccfv
 }  // namespace quantifiers
 }  // namespace theory
