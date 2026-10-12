@@ -28,6 +28,12 @@ class EqualityEngine;
 namespace quantifiers {
 namespace ccfv {
 
+struct CnfCount
+{
+  size_t clauses = 0;
+  size_t totalLiterals = 0;
+};
+
 inline bool isLiteral(Node n) { return QuantifiersRewriter::isLiteral(n); }
 
 inline bool isClause(Node n)
@@ -58,7 +64,11 @@ inline bool isCnf(Node n)
   return false;
 }
 
-std::vector<Node> toCnf(NodeManager* nm, Node body);
+Node computeNnf(NodeManager* nm, Node n, bool pol);
+
+Node computePrenex(NodeManager* nm, Node n, bool pol);
+
+std::vector<std::vector<Node>> toCnf();
 
 // TODO: implement it later
 class CcfvIndices

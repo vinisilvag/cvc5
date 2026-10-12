@@ -56,11 +56,11 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
                 << quant_e << std::endl;
   if (quant_e == QEFFORT_CONFLICT)
   {
+    return;
     checkConflictInst(level);
   }
   else if (quant_e == QEFFORT_STANDARD)
   {
-    return;
     checkTriggerInst(level);
   }
   else if (quant_e == QEFFORT_MODEL)
@@ -91,7 +91,7 @@ void CcfvEngine::checkConflictInst(Theory::Effort level)
       continue;
     }
 
-    // Ensure q is in CNF
+    // Transform and ensure q is in CNF
     Assert(ccfv::isCnf(q));
 
     Trace("ccfv-debug") << "CcfvEngine: Checking quantifier: " << q
@@ -201,6 +201,9 @@ void CcfvEngine::checkTriggerInst(Theory::Effort level)
       Trace("ccfv-debug") << "  No triggers found, skipping." << std::endl;
       continue;
     }
+
+    // Create equalities
+    // Call solver for each set of equalities
 
     Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
     for (const std::vector<Node>& patterns : triggers)
