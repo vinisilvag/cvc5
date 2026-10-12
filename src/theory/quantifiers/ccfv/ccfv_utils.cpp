@@ -185,9 +185,109 @@ Node computeNnf(NodeManager* nm, Node n, bool pol)
   }
 }
 
-Node computePrenex(NodeManager* nm, Node n, bool pol) {}
+Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
+{
+  switch (n.getKind())
+  {
+    case Kind::FORALL:
+    {
+      for (const Node& v : n[0])
+      {
+        vars.push_back(v);
+      }
+      return computePrenex(nm, n[1], vars);
+    }
+    case Kind::AND:
+    case Kind::OR:
+    {
+      std::vector<Node> children;
+      for (const Node& child : n)
+      {
+        Node newChild = computePrenex(nm, child, vars);
+        if (newChild.isNull())
+        {
+          return Node::null();
+        }
+        children.push_back(newChild);
+      }
+      return n.getKind() == Kind::AND ? nm->mkAnd(children)
+                                      : nm->mkOr(children);
+    }
+    default:
+    {
+      return n;
+    }
+  }
+}
 
-std::vector<std::vector<Node>> toCnf() {}
+std::vector<std::vector<Node>> toCnf(Node n)
+{
+  switch (n.getKind())
+  {
+    case Kind::AND:
+    {
+      std::vector<std::vector<Node>> result;
+      for (const Node& child : n)
+      {
+        std::vector<std::vector<Node>> childCnf = toCnf(child);
+        result.insert(result.end(), childCnf.begin(), childCnf.end());
+      }
+      return result;
+    }
+    case Kind::OR:
+    {
+      if (n.getNumChildren() == 0)
+      {
+        return {};
+      }
+
+      std::vector<std::vector<Node>> current = toCnf(n[0]);
+      for (size_t i = 1; i < n.getNumChildren(); ++i)
+      {
+        std::vector<std::vector<Node>> next = toCnf(n[i]);
+        std::vector<std::vector<Node>> merged;
+
+        for (const auto& c1 : current)
+        {
+          for (const auto& c2 : next)
+          {
+            std::vector<Node> combined = c1;
+            combined.insert(combined.end(), c2.begin(), c2.end());
+            merged.push_back(std::move(combined));
+          }
+        }
+        current = std::move(merged);
+      }
+      return current;
+    }
+    default:
+    {
+      return {{n}};
+    }
+  }
+}
+
+bool computeQuantCnf(Node q,
+                     std::vector<Node>& vars,
+                     std::vector<std::vector<Node>>& clauses)
+{
+  NodeManager* nm = q.getNodeManager();
+
+  Node nnf = computeNnf(nm, q, /*pol=*/true);
+  if (nnf.isNull())
+  {
+    return false;
+  }
+
+  Node prenexBody = computePrenex(nm, nnf, vars);
+  if (prenexBody.isNull())
+  {
+    return false;
+  }
+
+  clauses = toCnf(prenexBody);
+  return true;
+}
 
 CcfvIndices::CcfvIndices(eq::EqualityEngine* ee) {}
 

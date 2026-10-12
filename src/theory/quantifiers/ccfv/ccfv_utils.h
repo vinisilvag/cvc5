@@ -28,13 +28,22 @@ class EqualityEngine;
 namespace quantifiers {
 namespace ccfv {
 
-struct CnfCount
+inline bool isLiteral(Node n)
 {
-  size_t clauses = 0;
-  size_t totalLiterals = 0;
-};
-
-inline bool isLiteral(Node n) { return QuantifiersRewriter::isLiteral(n); }
+  if (n.getKind() == Kind::NOT)
+  {
+    n = n[0];
+    if (n.getKind() == Kind::NOT)
+    {
+      return false;
+    }
+  }
+  if (n.getKind() == Kind::FORALL || n.getKind() == Kind::EXISTS)
+  {
+    return false;
+  }
+  return QuantifiersRewriter::isLiteral(n);
+}
 
 inline bool isClause(Node n)
 {
@@ -52,6 +61,10 @@ inline bool isClause(Node n)
 
 inline bool isCnf(Node n)
 {
+  while (n.getKind() == Kind::FORALL)
+  {
+    n = n[1];
+  }
   if (isClause(n)) return true;
   if (n.getKind() == Kind::AND)
   {
@@ -66,9 +79,13 @@ inline bool isCnf(Node n)
 
 Node computeNnf(NodeManager* nm, Node n, bool pol);
 
-Node computePrenex(NodeManager* nm, Node n, bool pol);
+Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars);
 
-std::vector<std::vector<Node>> toCnf();
+std::vector<std::vector<Node>> toCnf(Node n);
+
+bool computeQuantCnf(Node q,
+                     std::vector<Node>& vars,
+                     std::vector<std::vector<Node>>& clauses);
 
 // TODO: implement it later
 class CcfvIndices
