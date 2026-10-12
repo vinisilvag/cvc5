@@ -56,11 +56,11 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
                 << quant_e << std::endl;
   if (quant_e == QEFFORT_CONFLICT)
   {
-    return;
     checkConflictInst(level);
   }
   else if (quant_e == QEFFORT_STANDARD)
   {
+    return;
     checkTriggerInst(level);
   }
   else if (quant_e == QEFFORT_MODEL)
@@ -91,47 +91,63 @@ void CcfvEngine::checkConflictInst(Theory::Effort level)
       continue;
     }
 
-    // Transform and ensure q is in CNF
-    Assert(ccfv::isCnf(q));
-
     Trace("ccfv-debug") << "CcfvEngine: Checking quantifier: " << q
                         << std::endl;
 
-    std::vector<Node> freeVars(q[0].begin(), q[0].end());
-    std::vector<Node> L;
-    if (q[1].getKind() == Kind::OR)
+    if (d_quantCnf.find(q) == d_quantCnf.end())
     {
-      for (const Node& lit : q[1])
+      std::vector<Node> vars;
+      std::vector<std::vector<Node>> clauses;
+      if (!ccfv::computeQuantCnf(q, vars, clauses))
+      {
+        d_quantCnf[q] = {};
+        continue;
+      }
+      d_quantCnf[q] = std::move(clauses);
+      d_quantVars[q] = std::move(vars);
+    }
+    if (d_quantCnf[q].empty())
+    {
+      continue;
+    }
+
+    const auto& clauses = d_quantCnf[q];
+    const auto& freeVars = d_quantVars[q];
+
+    Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
+    Trace("ccfv-debug") << "  Clauses after CNF: " << clauses << std::endl;
+
+    bool foundConflict = false;
+
+    for (auto const& clause : clauses)
+    {
+      std::vector<Node> L;
+      for (const Node& lit : clause)
       {
         L.push_back(lit.negate());
       }
-    }
-    else
-    {
-      L.push_back(q[1].negate());
-    }
 
-    Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
-    Trace("ccfv-debug") << "  L (negated body): " << L << std::endl;
+      std::vector<std::vector<Node>> substitutions;
+      bool substitutionFound = d_solver->solve(
+          options().quantifiers.ccfvMode, freeVars, L, ee, substitutions);
 
-    std::vector<std::vector<Node>> substitutions;
-    bool substitutionFound = d_solver->solve(
-        options().quantifiers.ccfvMode, freeVars, L, ee, substitutions);
-
-    if (substitutionFound && !substitutions.empty())
-    {
-      Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
-                    << " conflicting instance(s) for " << q << std::endl;
-
-      for (const std::vector<Node>& sub : substitutions)
+      if (substitutionFound && !substitutions.empty())
       {
-        Trace("ccfv-debug")
-            << "  Applying instantiation terms: " << sub << std::endl;
+        foundConflict = true;
+        Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
+                      << " conflicting instance(s) for " << q << std::endl;
 
-        // TODO: apply instantiation
+        for (const std::vector<Node>& sub : substitutions)
+        {
+          Trace("ccfv-debug")
+              << "  Applying instantiation terms: " << sub << std::endl;
+          // TODO: apply instantiation
+        }
+
+        break;
       }
     }
-    else
+    if (!foundConflict)
     {
       Trace("ccfv-debug") << "  No conflicting instance found for quantifier."
                           << std::endl;

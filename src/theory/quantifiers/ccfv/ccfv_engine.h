@@ -59,6 +59,12 @@ class CcfvEngine : public QuantifiersModule
   std::string identify() const override { return "CcfvEngine"; }
 
  private:
+  std::unordered_map<Node, std::vector<std::vector<Node>>> d_quantCnf;
+  std::unordered_map<Node, std::vector<Node>> d_quantVars;
+
+  /** CCFV solver instance for solving E-ground (dis)unification */
+  std::unique_ptr<CcfvSolver> d_solver;
+
   /** Custom Conflict-based instantiation implementation */
   void checkConflictInst(Theory::Effort level);
 
@@ -67,9 +73,6 @@ class CcfvEngine : public QuantifiersModule
 
   /** Custom Model-based instantiation implementation */
   void checkModelInst(Theory::Effort level);
-
-  /** CCFV solver instance for solving E-ground (dis)unification */
-  std::unique_ptr<CcfvSolver> d_solver;
 };
 
 }  // namespace quantifiers

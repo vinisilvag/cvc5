@@ -1,3 +1,16 @@
+/******************************************************************************
+ * This file is part of the cvc5 project.
+ *
+ * Copyright (c) 2009-2026 by the authors listed in the file AUTHORS
+ * in the top-level source directory and their institutional affiliations.
+ * All rights reserved.  See the file COPYING in the top-level source
+ * directory for licensing information.
+ * ****************************************************************************
+ *
+ * Implementation of CCFV preprocessing utilities: Negation Normal Form (NNF),
+ * universal quantifier prenexing, and classical distributive CNF expansion.
+ */
+
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 
 namespace cvc5::internal {
@@ -9,11 +22,14 @@ Node computeNnf(NodeManager* nm, Node n, bool pol)
 {
   switch (n.getKind())
   {
+    // Double negation cancellation: alternating polarity bit flips sign
+    // directly
     case Kind::NOT:
     {
       return computeNnf(nm, n[0], !pol);
     }
-    // AND and OR: applies DeMorgan and flattening to avoid nesting
+    // AND and OR: applies De Morgan's duality and flattens nested same-kind
+    // nodes to avoid quadratic recursion during distributivity
     case Kind::AND:
     {
       Kind targetKind = pol ? Kind::AND : Kind::OR;
@@ -27,6 +43,8 @@ Node computeNnf(NodeManager* nm, Node n, bool pol)
           return Node::null();
         }
 
+        // Inline grandchildren if child matches the parent's target connective
+        // (flattening)
         if (nnf.getKind() == targetKind)
         {
           children.insert(children.end(), nnf.begin(), nnf.end());
@@ -189,6 +207,8 @@ Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
 {
   switch (n.getKind())
   {
+    // Peel universal quantifier, accumulate variables, and continue down the
+    // body
     case Kind::FORALL:
     {
       for (const Node& v : n[0])
@@ -197,6 +217,7 @@ Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
       }
       return computePrenex(nm, n[1], vars);
     }
+    // Recursively lift quantifiers from conjuncts and disjuncts
     case Kind::AND:
     case Kind::OR:
     {
@@ -213,6 +234,7 @@ Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
       return n.getKind() == Kind::AND ? nm->mkAnd(children)
                                       : nm->mkOr(children);
     }
+    // Literals, atoms, and existential quantifiers remain
     default:
     {
       return n;
@@ -247,6 +269,7 @@ std::vector<std::vector<Node>> toCnf(Node n)
         std::vector<std::vector<Node>> next = toCnf(n[i]);
         std::vector<std::vector<Node>> merged;
 
+        // Merge every accumulated clause with every clause of the next disjunct
         for (const auto& c1 : current)
         {
           for (const auto& c2 : next)
@@ -273,7 +296,7 @@ bool computeQuantCnf(Node q,
 {
   NodeManager* nm = q.getNodeManager();
 
-  Node nnf = computeNnf(nm, q, /*pol=*/true);
+  Node nnf = computeNnf(nm, q, true);
   if (nnf.isNull())
   {
     return false;
