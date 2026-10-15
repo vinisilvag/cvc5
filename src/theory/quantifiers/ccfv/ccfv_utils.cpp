@@ -13,6 +13,9 @@
 
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 
+#include "theory/uf/equality_engine.h"
+#include "theory/uf/equality_engine_iterator.h"
+
 namespace cvc5::internal {
 namespace theory {
 namespace quantifiers {
@@ -382,13 +385,72 @@ bool computeQuantCnf(Node q,
   return true;
 }
 
-CcfvIndices::CcfvIndices(eq::EqualityEngine* ee) {}
+const std::vector<Node> CcfvIndices::s_empty = {};
 
-std::vector<Node> CcfvIndices::getDiseqs(Node t) { return diseqs[t]; }
+CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
+{
+  // Compute `diseqs`
+  std::vector<Node> allReps;
+  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+  {
+    allReps.push_back(*eqcs_i);
+  }
 
-std::vector<Node> CcfvIndices::getReps(Node f) { return reps[f]; }
+  for (size_t i = 0; i < allReps.size(); ++i)
+  {
+    for (size_t j = i + 1; j < allReps.size(); ++j)
+    {
+      if (ee->areDisequal(allReps[i], allReps[j], false))
+      {
+        diseqs[allReps[i]].push_back(allReps[j]);
+        diseqs[allReps[j]].push_back(allReps[i]);
+      }
+    }
+  }
 
-std::vector<Node> CcfvIndices::getApps(Node f, Node t) { return {}; }
+  // Compute `apps` and `reps`
+  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+  {
+    Node rep = *eqcs_i;
+    eq::EqClassIterator eqc_i(rep, ee);
+    while (!eqc_i.isFinished())
+    {
+      Node term = *eqc_i;
+      if (term.getKind() == Kind::APPLY_UF)
+      {
+        Node f = term.getOperator();
+
+        // Compute `apps`
+        apps[{f, rep}].push_back(term);
+
+        // Compute `reps`
+        if (reps.find(f) == reps.end())
+        {
+          reps[f].push_back(rep);
+        }
+      }
+      ++eqc_i;
+    }
+  }
+}
+
+const std::vector<Node>& CcfvIndices::getDiseqs(Node t) const
+{
+  auto it = diseqs.find(t);
+  return (it != diseqs.end()) ? it->second : s_empty;
+}
+
+const std::vector<Node>& CcfvIndices::getReps(Node f) const
+{
+  auto it = reps.find(f);
+  return (it != reps.end()) ? it->second : s_empty;
+}
+
+const std::vector<Node>& CcfvIndices::getApps(Node f, Node t) const
+{
+  auto it = apps.find({f, t});
+  return (it != apps.end()) ? it->second : s_empty;
+}
 
 }  // namespace ccfv
 }  // namespace quantifiers

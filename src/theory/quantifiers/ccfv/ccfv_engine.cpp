@@ -13,6 +13,8 @@
 
 #include "theory/quantifiers/ccfv/ccfv_engine.h"
 
+#include <memory>
+
 #include "base/output.h"
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
@@ -118,7 +120,6 @@ void CcfvEngine::checkConflictInst(Theory::Effort level)
     // Trace("ccfv-debug") << "  Clauses after CNF: " << clauses << std::endl;
 
     bool foundConflict = false;
-
     for (const std::vector<Node>& clause : clauses)
     {
       std::vector<Node> L;

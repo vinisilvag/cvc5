@@ -15,6 +15,7 @@
 
 #include "base/output.h"
 #include "expr/node_algorithm.h"
+#include "theory/quantifiers/ccfv/ccfv_utils.h"
 #include "theory/uf/equality_engine.h"
 
 namespace cvc5::internal {
@@ -42,7 +43,7 @@ bool CcfvSolver::solve(options::CcfvMode mode,
   {
     Trace("ccfv-solver") << "  Dispatching to: Decision Procedure backend"
                          << std::endl;
-    return solveProcedural(freeVars, lits, ee, substitutions);
+    return solveProcedural(lits, ee, substitutions);
   }
   else if (mode == options::CcfvMode::SAT)
   {
@@ -57,6 +58,7 @@ bool CcfvSolver::solve(options::CcfvMode mode,
 std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
     const std::vector<Node> lits,
     eq::EqualityEngine* ee,
+    const ccfv::CcfvIndices& indices,
     std::vector<std::vector<Node>> substitutions)
 {
   if (lits.empty())
@@ -81,7 +83,7 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       // Syntactic equality
       if (l == r)
       {
-        return solveProceduralRec(newLits, ee, substitutions);
+        return solveProceduralRec(newLits, ee, indices, substitutions);
       }
 
       // Ground equality
@@ -117,12 +119,12 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
   return sols;
 }
 
-bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
-                                 const std::vector<Node>& lits,
+bool CcfvSolver::solveProcedural(const std::vector<Node>& lits,
                                  eq::EqualityEngine* ee,
                                  std::vector<std::vector<Node>>& substitutions)
 {
-  substitutions = solveProceduralRec(lits, ee, {});
+  ccfv::CcfvIndices indices(ee);
+  substitutions = solveProceduralRec(lits, ee, indices, {});
   return !substitutions.empty();
 }
 

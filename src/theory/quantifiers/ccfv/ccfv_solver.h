@@ -19,6 +19,7 @@
 #include "expr/node.h"
 #include "options/quantifiers_options.h"
 #include "smt/env_obj.h"
+#include "theory/quantifiers/ccfv/ccfv_utils.h"
 
 namespace cvc5::internal {
 namespace theory {
@@ -66,19 +67,17 @@ class CcfvSolver : protected EnvObj
              std::vector<std::vector<Node>>& substitutions);
 
  private:
-  std::vector<std::vector<Node>> solveProceduralRec(
-      const std::vector<Node> lits,
-      eq::EqualityEngine* ee,
-      std::vector<std::vector<Node>> substitutions);
-
   /** Solves using the decision procedure. */
-  bool solveProcedural(const std::vector<Node>& freeVars,
-                       const std::vector<Node>& lits,
+  bool solveProcedural(const std::vector<Node>& lits,
                        eq::EqualityEngine* ee,
                        std::vector<std::vector<Node>>& substitutions);
 
   /** TODO: add comments */
-  std::vector<std::vector<Node>> solveProceduralRec();
+  std::vector<std::vector<Node>> solveProceduralRec(
+      const std::vector<Node> lits,
+      eq::EqualityEngine* ee,
+      const ccfv::CcfvIndices& indices,
+      std::vector<std::vector<Node>> substitutions);
 
   /** Solves using the SAT encoding procedure. */
   bool solveSat(const std::vector<Node>& freeVars,

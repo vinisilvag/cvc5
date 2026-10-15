@@ -20,6 +20,7 @@
 
 #include "expr/node.h"
 #include "theory/quantifiers/quantifiers_rewriter.h"
+#include "util/hash.h"
 
 namespace cvc5::internal {
 namespace theory {
@@ -30,6 +31,9 @@ class EqualityEngine;
 
 namespace quantifiers {
 namespace ccfv {
+
+using NodePairHash =
+    PairHashFunction<Node, Node, std::hash<Node>, std::hash<Node>>;
 
 /**
  * Checks whether a node is a first-order literal (an atom or its negation).
@@ -159,13 +163,17 @@ class CcfvIndices
 {
  public:
   CcfvIndices(eq::EqualityEngine* ee);
-  std::vector<Node> getDiseqs(Node t);
-  std::vector<Node> getReps(Node f);
-  std::vector<Node> getApps(Node f, Node t);
+  const std::vector<Node>& getDiseqs(Node t) const;
+  const std::vector<Node>& getReps(Node f) const;
+  const std::vector<Node>& getApps(Node f, Node t) const;
 
  private:
   std::unordered_map<Node, std::vector<Node>> diseqs;
+  std::unordered_map<std::pair<Node, Node>, std::vector<Node>, NodePairHash>
+      apps;
   std::unordered_map<Node, std::vector<Node>> reps;
+
+  static const std::vector<Node> s_empty;
 };
 
 }  // namespace ccfv
