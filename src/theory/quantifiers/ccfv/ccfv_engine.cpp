@@ -111,15 +111,15 @@ void CcfvEngine::checkConflictInst(Theory::Effort level)
       continue;
     }
 
-    const auto& clauses = d_quantCnf[q];
-    const auto& freeVars = d_quantVars[q];
+    const std::vector<std::vector<Node>>& clauses = d_quantCnf[q];
+    const std::vector<Node>& freeVars = d_quantVars[q];
 
     Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
-    Trace("ccfv-debug") << "  Clauses after CNF: " << clauses << std::endl;
+    // Trace("ccfv-debug") << "  Clauses after CNF: " << clauses << std::endl;
 
     bool foundConflict = false;
 
-    for (auto const& clause : clauses)
+    for (const std::vector<Node>& clause : clauses)
     {
       std::vector<Node> L;
       for (const Node& lit : clause)
@@ -218,8 +218,7 @@ void CcfvEngine::checkTriggerInst(Theory::Effort level)
       continue;
     }
 
-    // Create equalities
-    // Call solver for each set of equalities
+    // TODO: handle equalities later
 
     Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
     for (const std::vector<Node>& patterns : triggers)

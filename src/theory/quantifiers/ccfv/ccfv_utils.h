@@ -15,6 +15,7 @@
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_UTILS_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_UTILS_H
 
+#include <unordered_map>
 #include <vector>
 
 #include "expr/node.h"
@@ -154,7 +155,6 @@ bool computeQuantCnf(Node q,
                      std::vector<Node>& vars,
                      std::vector<std::vector<Node>>& clauses);
 
-// TODO: implement it later
 class CcfvIndices
 {
  public:
@@ -164,6 +164,8 @@ class CcfvIndices
   std::vector<Node> getApps(Node f, Node t);
 
  private:
+  std::unordered_map<Node, std::vector<Node>> diseqs;
+  std::unordered_map<Node, std::vector<Node>> reps;
 };
 
 }  // namespace ccfv

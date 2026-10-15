@@ -870,6 +870,8 @@ libcvc5_add_sources(
   theory/quantifiers/ccfv/ccfv_engine.h
   theory/quantifiers/ccfv/ccfv_solver.cpp
   theory/quantifiers/ccfv/ccfv_solver.h
+  theory/quantifiers/ccfv/ccfv_utils.cpp
+  theory/quantifiers/ccfv/ccfv_utils.h
   theory/quantifiers/entailment_check.cpp
   theory/quantifiers/entailment_check.h
   theory/quantifiers/equality_query.cpp

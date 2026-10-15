@@ -18,6 +18,7 @@ namespace theory {
 namespace quantifiers {
 namespace ccfv {
 
+// TODO: Tseitin transformation? Check with Haniel later
 Node computeNnf(NodeManager* nm, Node n, bool pol)
 {
   switch (n.getKind())
@@ -203,12 +204,73 @@ Node computeNnf(NodeManager* nm, Node n, bool pol)
   }
 }
 
+Node skolemize(NodeManager* nm, Node n, std::vector<Node>& freeVars)
+{
+  switch (n.getKind())
+  {
+    case Kind::FORALL:
+    {
+      std::vector<Node> newFreevars = freeVars;
+      for (const Node& v : n[0])
+      {
+        newFreevars.push_back(v);
+      }
+      Node newBody = skolemize(nm, n[1], newFreevars);
+      return nm->mkNode(Kind::FORALL, n[0], newBody);
+    }
+    case Kind::EXISTS:
+    {
+      std::vector<TypeNode> argTypes;
+      for (const Node& v : freeVars)
+      {
+        argTypes.push_back(v.getType());
+      }
+
+      std::vector<Node> vars;
+      std::vector<Node> skolemTerms;
+      for (const Node& v : n[0])
+      {
+        vars.push_back(v);
+        if (freeVars.empty())
+        {
+          skolemTerms.push_back(NodeManager::mkDummySkolem("sk", v.getType()));
+        }
+        else
+        {
+          TypeNode fnType = nm->mkFunctionType(argTypes, v.getType());
+          Node op = NodeManager::mkDummySkolem("skop", fnType);
+          std::vector<Node> appArgs = {op};
+          appArgs.insert(appArgs.end(), freeVars.begin(), freeVars.end());
+          skolemTerms.push_back(nm->mkNode(Kind::APPLY_UF, appArgs));
+        }
+      }
+
+      Node skBody = n[1].substitute(
+          vars.begin(), vars.end(), skolemTerms.begin(), skolemTerms.end());
+
+      return skolemize(nm, skBody, freeVars);
+    }
+    case Kind::AND:
+    case Kind::OR:
+    {
+      std::vector<Node> children;
+      for (const Node& child : n)
+      {
+        children.push_back(skolemize(nm, child, freeVars));
+      }
+      return nm->mkNode(n.getKind(), children);
+    }
+    default:
+    {
+      return n;
+    }
+  }
+}
+
 Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
 {
   switch (n.getKind())
   {
-    // Peel universal quantifier, accumulate variables, and continue down the
-    // body
     case Kind::FORALL:
     {
       for (const Node& v : n[0])
@@ -217,7 +279,6 @@ Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
       }
       return computePrenex(nm, n[1], vars);
     }
-    // Recursively lift quantifiers from conjuncts and disjuncts
     case Kind::AND:
     case Kind::OR:
     {
@@ -234,7 +295,6 @@ Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
       return n.getKind() == Kind::AND ? nm->mkAnd(children)
                                       : nm->mkOr(children);
     }
-    // Literals, atoms, and existential quantifiers remain
     default:
     {
       return n;
@@ -302,21 +362,31 @@ bool computeQuantCnf(Node q,
     return false;
   }
 
-  Node prenexBody = computePrenex(nm, nnf, vars);
+  // Pre-Skolemization to avoid unnecessary dependencies
+  std::vector<Node> freeVars;
+  Node skolemizedBody = skolemize(nm, nnf, freeVars);
+  if (skolemizedBody.isNull())
+  {
+    return false;
+  }
+
+  // Prenexing to lift for all's to the left
+  Node prenexBody = computePrenex(nm, skolemizedBody, vars);
   if (prenexBody.isNull())
   {
     return false;
   }
 
+  // Distributivity
   clauses = toCnf(prenexBody);
   return true;
 }
 
 CcfvIndices::CcfvIndices(eq::EqualityEngine* ee) {}
 
-std::vector<Node> CcfvIndices::getDiseqs(Node t) { return {}; }
+std::vector<Node> CcfvIndices::getDiseqs(Node t) { return diseqs[t]; }
 
-std::vector<Node> CcfvIndices::getReps(Node f) { return {}; }
+std::vector<Node> CcfvIndices::getReps(Node f) { return reps[f]; }
 
 std::vector<Node> CcfvIndices::getApps(Node f, Node t) { return {}; }
 
