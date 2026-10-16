@@ -385,17 +385,17 @@ bool computeQuantCnf(Node q,
   return true;
 }
 
-const std::vector<Node> CcfvIndices::s_empty = {};
-
 CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
 {
-  // Compute `diseqs`
+  d_ee = ee;
+
   std::vector<Node> allReps;
   for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
   {
     allReps.push_back(*eqcs_i);
   }
 
+  // Compute `diseqs`
   for (size_t i = 0; i < allReps.size(); ++i)
   {
     for (size_t j = i + 1; j < allReps.size(); ++j)
@@ -409,9 +409,8 @@ CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
   }
 
   // Compute `apps` and `reps`
-  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+  for (const Node& rep : allReps)
   {
-    Node rep = *eqcs_i;
     eq::EqClassIterator eqc_i(rep, ee);
     while (!eqc_i.isFinished())
     {
@@ -424,7 +423,7 @@ CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
         apps[{f, rep}].push_back(term);
 
         // Compute `reps`
-        if (reps.find(f) == reps.end())
+        if (apps[{f, rep}].size() == 1)
         {
           reps[f].push_back(rep);
         }
@@ -434,9 +433,16 @@ CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
   }
 }
 
+const std::vector<Node> CcfvIndices::s_empty = {};
+
 const std::vector<Node>& CcfvIndices::getDiseqs(Node t) const
 {
-  auto it = diseqs.find(t);
+  Node rep;
+  if (d_ee->hasTerm(t))
+    rep = d_ee->getRepresentative(t);
+  else
+    rep = t;
+  auto it = diseqs.find(rep);
   return (it != diseqs.end()) ? it->second : s_empty;
 }
 
@@ -448,7 +454,12 @@ const std::vector<Node>& CcfvIndices::getReps(Node f) const
 
 const std::vector<Node>& CcfvIndices::getApps(Node f, Node t) const
 {
-  auto it = apps.find({f, t});
+  Node rep;
+  if (d_ee->hasTerm(t))
+    rep = d_ee->getRepresentative(t);
+  else
+    rep = t;
+  auto it = apps.find({f, rep});
   return (it != apps.end()) ? it->second : s_empty;
 }
 

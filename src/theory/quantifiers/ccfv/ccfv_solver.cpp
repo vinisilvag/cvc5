@@ -81,6 +81,7 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       Node l = c[0], r = c[1];
 
       // Syntactic equality
+      // s = s
       if (l == r)
       {
         return solveProceduralRec(newLits, ee, indices, substitutions);
@@ -93,6 +94,11 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       }
 
       // Assignmnet
+      // x = s or s = x
+
+      // E-matching
+
+      // E-unify arguments
 
       break;
     }

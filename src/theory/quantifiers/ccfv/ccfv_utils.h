@@ -168,6 +168,7 @@ class CcfvIndices
   const std::vector<Node>& getApps(Node f, Node t) const;
 
  private:
+  eq::EqualityEngine* d_ee;
   std::unordered_map<Node, std::vector<Node>> diseqs;
   std::unordered_map<std::pair<Node, Node>, std::vector<Node>, NodePairHash>
       apps;
