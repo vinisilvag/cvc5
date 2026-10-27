@@ -68,12 +68,14 @@ class CcfvSolver : protected EnvObj
 
  private:
   /** Solves using the decision procedure. */
-  bool solveProcedural(const std::vector<Node>& lits,
+  bool solveProcedural(const std::vector<Node>& freeVars,
+                       const std::vector<Node>& lits,
                        eq::EqualityEngine* ee,
                        std::vector<std::vector<Node>>& substitutions);
 
   /** TODO: add comments */
   std::vector<std::vector<Node>> solveProceduralRec(
+      const std::vector<Node>& freeVars,
       const std::vector<Node> lits,
       eq::EqualityEngine* ee,
       const ccfv::CcfvIndices& indices,

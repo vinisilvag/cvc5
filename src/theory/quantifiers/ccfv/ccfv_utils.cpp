@@ -400,7 +400,8 @@ CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
   {
     for (size_t j = i + 1; j < allReps.size(); ++j)
     {
-      if (ee->areDisequal(allReps[i], allReps[j], false))
+      if ((allReps[i].getType() == allReps[j].getType())
+          && ee->areDisequal(allReps[i], allReps[j], false))
       {
         diseqs[allReps[i]].push_back(allReps[j]);
         diseqs[allReps[j]].push_back(allReps[i]);
