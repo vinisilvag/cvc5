@@ -58,7 +58,6 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
                 << quant_e << std::endl;
   if (quant_e == QEFFORT_CONFLICT)
   {
-    return;
     checkConflictInst(level);
   }
   else if (quant_e == QEFFORT_STANDARD)
