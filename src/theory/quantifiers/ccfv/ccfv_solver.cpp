@@ -83,7 +83,6 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
   {
     c = c.eqNode(nm->mkConst(true));
   }
-
   if (c.getKind() == Kind::NOT && c[0].getKind() == Kind::APPLY_UF)
   {
     c = c[0].eqNode(nm->mkConst(false));
@@ -175,13 +174,15 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
         {
           if (term.hasOperator())
           {
-            Trace("ccfv") << "      CcfvEngine: " << term << " is an UF"
-                          << std::endl;
-
             Node op = term.getOperator();
-
+            Trace("ccfv") << "      CcfvEngine: Uvar (" << variable
+                          << " occurs in " << term << " with op = " << op << ")"
+                          << std::endl;
             for (const Node& t : indices.getReps(op))
             {
+              Trace("ccfv")
+                  << "      CcfvEngine: adding " << term.eqNode(t) << " and "
+                  << variable.eqNode(t) << " to C" << std::endl;
               std::vector<Node> branchLits = newLits;
               branchLits.push_back(term.eqNode(t));
               branchLits.push_back(variable.eqNode(t));
@@ -220,6 +221,8 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
           std::vector<Node> branchLits = newLits;
           for (size_t i = 0, n = fTerm.getNumChildren(); i < n; ++i)
           {
+            Trace("ccfv") << "      CcfvEngine: adding "
+                          << fTerm[i].eqNode(app[i]) << " to C" << std::endl;
             branchLits.push_back(fTerm[i].eqNode(app[i]));
           }
           std::vector<std::vector<Node>> branchSols = solveProceduralRec(
@@ -283,6 +286,8 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
 
       if (l == r)
       {
+        Trace("ccfv") << "    CcfvEngine: syntactic disequality (" << l
+                      << " != " << r << "), failing branch" << std::endl;
         return {};
       }
 
@@ -291,12 +296,20 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
       if (lIsGround && rIsGround)
       {
+        Trace("ccfv") << "    CcfvEngine: ground disequality (" << l
+                      << " != " << r << ")" << std::endl;
         if (ee->hasTerm(l) && ee->hasTerm(r))
         {
           if (!ee->areDisequal(l, r, false))
           {
+            Trace("ccfv")
+                << "      CcfvEngine: they are not disequal, failing branch"
+                << std::endl;
             return {};
           }
+          Trace("ccfv")
+              << "      CcfvEngine: they are disequal, removing from C"
+              << std::endl;
           return solveProceduralRec(
               freeVars, newLits, ee, indices, currentSubstitution);
         }
@@ -311,8 +324,14 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
         Node variable = (l.getKind() == Kind::BOUND_VARIABLE ? l : r);
         Node term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
 
+        Trace("ccfv") << "    CcfvEngine: assignment into a disequal term ("
+                      << variable << " != " << term << ")" << std::endl;
+
         for (const Node& t : indices.getDiseqs(term))
         {
+          Trace("ccfv") << "      CcfvEngine: assigning " << variable
+                        << " to disequal rep " << t << " ("
+                        << variable.eqNode(t) << ")" << std::endl;
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(variable.eqNode(t));
           std::vector<std::vector<Node>> branchSols = solveProceduralRec(
@@ -330,10 +349,17 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
               && ee->hasTerm(l)))
       {
         Node fTerm = ee->hasTerm(r) ? l : r;
-        Node t = ee->hasTerm(l) ? r : l;
+        Node t = ee->hasTerm(r) ? r : l;
+
+        Trace("ccfv") << "    CcfvEngine: E-Matching UF with disequal ground "
+                         "term ("
+                      << fTerm << " != " << t << ")" << std::endl;
 
         for (const Node& tt : indices.getDiseqs(t))
         {
+          Trace("ccfv") << "      CcfvEngine: E-Matching " << fTerm
+                        << " with disequal rep " << tt << " and adding "
+                        << fTerm.eqNode(tt) << " to C" << std::endl;
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(fTerm.eqNode(tt));
           std::vector<std::vector<Node>> branchSols = solveProceduralRec(
@@ -352,8 +378,14 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
         Node variable = (l.getKind() == Kind::BOUND_VARIABLE ? l : r);
         Node term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
 
+        Trace("ccfv") << "    CcfvEngine: DFapp (" << variable << " != " << term
+                      << ")" << std::endl;
+
         for (const Node& t : indices.getReps(term.getOperator()))
         {
+          Trace("ccfv") << "      CcfvEngine: adding " << term.eqNode(t)
+                        << " and " << variable.eqNode(t).negate() << " to C"
+                        << std::endl;
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(term.eqNode(t));
           branchLits.push_back(variable.eqNode(t).negate());
@@ -369,8 +401,12 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       // f(u_n) != g(u'_n) or g(u'_n) != f(u_n)
       if (l.hasOperator() && r.hasOperator())
       {
+        Trace("ccfv") << "    CcfvEngine: E-Matching into disequal terms (" << l
+                      << " != " << r << ")" << std::endl;
         for (const Node& t : indices.getReps(l.getOperator()))
         {
+          Trace("ccfv") << "      CcfvEngine: adding " << l.eqNode(t) << " and "
+                        << r.eqNode(t).negate() << " to C" << std::endl;
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(l.eqNode(t));
           branchLits.push_back(r.eqNode(t).negate());
@@ -387,6 +423,8 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       if (l.getKind() == Kind::BOUND_VARIABLE
           && r.getKind() == Kind::BOUND_VARIABLE)
       {
+        Trace("ccfv") << "    CcfvEngine: DVar (" << l << " != " << r << ")"
+                      << std::endl;
         for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
         {
           Node rep = *eqcs_i;
@@ -397,6 +435,8 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
 
           for (const Node& t : indices.getDiseqs(rep))
           {
+            Trace("ccfv") << "      CcfvEngine: adding " << l.eqNode(rep)
+                          << " and " << r.eqNode(t) << " to C" << std::endl;
             std::vector<Node> branchLits = newLits;
             branchLits.push_back(l.eqNode(rep));
             branchLits.push_back(r.eqNode(t));
@@ -455,6 +495,8 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
           groundTerm = NodeManager::mkGroundTerm(tn);
         }
 
+        Trace("ccfv") << "  CcfvEngine: Grounding remaining free variable "
+                      << freeVars[i] << " with " << groundTerm << std::endl;
         // Substitute the variable with the ground term
         for (Node& t : sub)
         {

@@ -134,18 +134,22 @@ void CcfvEngine::checkConflictInst(Theory::Effort level)
 
       if (substitutionFound && !substitutions.empty())
       {
-        foundConflict = true;
         Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
                       << " conflicting instance(s) for " << q << std::endl;
 
-        for (const std::vector<Node>& sub : substitutions)
+        for (std::vector<Node>& sub : substitutions)
         {
           Trace("ccfv-debug") << "  Applying instantiation terms: " << freeVars
                               << " mapsto " << sub << std::endl;
-          // TODO: apply instantiation
+          if (qinst->addInstantiation(
+                  q, sub, InferenceId::QUANTIFIERS_INST_CBQI_CONFLICT))
+          {
+            // Conflict found and added
+            // Breaking the instantiation loop after one lemma added
+            foundConflict = true;
+            break;
+          }
         }
-
-        break;
       }
     }
     if (!foundConflict)
