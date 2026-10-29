@@ -13,6 +13,7 @@
 
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 
+#include "expr/node_algorithm.h"
 #include "theory/uf/equality_engine.h"
 #include "theory/uf/equality_engine_iterator.h"
 
@@ -382,6 +383,38 @@ bool computeQuantCnf(Node q,
 
   // Distributivity
   clauses = toCnf(prenexBody);
+  return true;
+}
+
+bool isSupportedTriggerTerm(Node n)
+{
+  if (n.getKind() != Kind::APPLY_UF)
+  {
+    return false;
+  }
+
+  std::vector<TNode> visit = {n};
+  std::unordered_set<TNode> visited;
+  while (!visit.empty())
+  {
+    TNode cur = visit.back();
+    visit.pop_back();
+    if (!visited.insert(cur).second)
+    {
+      continue;
+    }
+    if (cur.isVar() || !expr::hasBoundVar(cur))
+    {
+      continue;
+    }
+    // Trigger killer
+    if (cur.getKind() != Kind::APPLY_UF)
+    {
+      return false;
+    }
+    visit.insert(visit.end(), cur.begin(), cur.end());
+  }
+
   return true;
 }
 

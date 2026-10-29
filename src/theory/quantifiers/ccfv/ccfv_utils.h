@@ -159,6 +159,8 @@ bool computeQuantCnf(Node q,
                      std::vector<Node>& vars,
                      std::vector<std::vector<Node>>& clauses);
 
+bool isSupportedTriggerTerm(Node n);
+
 class CcfvIndices
 {
  public:
