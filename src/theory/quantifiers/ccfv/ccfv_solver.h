@@ -79,7 +79,7 @@ class CcfvSolver : protected EnvObj
       const std::vector<Node> lits,
       eq::EqualityEngine* ee,
       const ccfv::CcfvIndices& indices,
-      std::vector<std::vector<Node>> substitutions);
+      std::vector<Node> currentSubstitution);
 
   /** Solves using the SAT encoding procedure. */
   bool solveSat(const std::vector<Node>& freeVars,

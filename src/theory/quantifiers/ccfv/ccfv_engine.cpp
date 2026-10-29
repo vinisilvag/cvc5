@@ -140,8 +140,8 @@ void CcfvEngine::checkConflictInst(Theory::Effort level)
 
         for (const std::vector<Node>& sub : substitutions)
         {
-          Trace("ccfv-debug")
-              << "  Applying instantiation terms: " << sub << std::endl;
+          Trace("ccfv-debug") << "  Applying instantiation terms: " << freeVars
+                              << " mapsto " << sub << std::endl;
           // TODO: apply instantiation
         }
 
