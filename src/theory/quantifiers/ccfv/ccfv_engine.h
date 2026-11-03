@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "theory/quantifiers/quant_module.h"
+#include "util/statistics_stats.h"
 
 namespace cvc5::internal {
 namespace theory {
@@ -59,6 +60,13 @@ class CcfvEngine : public QuantifiersModule
   std::string identify() const override { return "CcfvEngine"; }
 
  private:
+  struct Statistics
+  {
+    Statistics(StatisticsRegistry& sr);
+    TimerStat d_solveTime;
+  };
+  Statistics d_stats;
+
   std::unordered_map<Node, std::vector<std::vector<Node>>> d_quantCnf;
   std::unordered_map<Node, std::vector<Node>> d_quantVars;
 

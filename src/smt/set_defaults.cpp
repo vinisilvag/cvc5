@@ -1509,7 +1509,7 @@ void SetDefaults::setDefaultsQuantifiers(const LogicInfo& logic,
 {
   if (opts.quantifiers.ccfvModeWasSetByUser)
   {
-    // Disable cvc5's default conflict-based and e-matching engines
+    // Disable cvc5's default conflict-based and E-matching engines
     SET_AND_NOTIFY_IF_NOT_USER(quantifiers, conflictBasedInst, false, "ccfv");
     SET_AND_NOTIFY_IF_NOT_USER(quantifiers, eMatching, false, "ccfv");
   }

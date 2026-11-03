@@ -28,12 +28,18 @@ namespace cvc5::internal {
 namespace theory {
 namespace quantifiers {
 
+CcfvEngine::Statistics::Statistics(StatisticsRegistry& sr)
+    : d_solveTime(sr.registerTimer("ccfv::solveTime"))
+{
+}
+
 CcfvEngine::CcfvEngine(Env& env,
                        QuantifiersState& qs,
                        QuantifiersInferenceManager& qim,
                        QuantifiersRegistry& qr,
                        TermRegistry& tr)
     : QuantifiersModule(env, qs, qim, qr, tr),
+      d_stats(statisticsRegistry()),
       d_solver(std::make_unique<CcfvSolver>(env))
 {
 }
@@ -128,8 +134,13 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
       }
 
       std::vector<std::vector<Node>> substitutions;
-      if (d_solver->solve(
-              options().quantifiers.ccfvMode, freeVars, L, ee, substitutions))
+      bool solved = false;
+      {
+        TimerStat::CodeTimer timer(d_stats.d_solveTime);
+        solved = d_solver->solve(
+            options().quantifiers.ccfvMode, freeVars, L, ee, substitutions);
+      }
+      if (solved)
       {
         Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
                       << " conflicting instance(s) for " << q << std::endl;
@@ -159,6 +170,14 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
   Trace("ccfv") << "CcfvEngine: Starting trigger-based instantiation check"
                 << std::endl;
 
+  if (d_qstate.isConflictingInst())
+  {
+    Trace("ccfv") << "CcfvEngine: Model already conflicted, aborting "
+                     "trigger-based instantiation"
+                  << std::endl;
+    return;
+  }
+
   FirstOrderModel* fm = d_treg.getModel();
   size_t nquant = fm->getNumAssertedQuantifiers();
   Instantiate* qinst = d_qim.getInstantiate();
@@ -166,6 +185,24 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
 
   Trace("ccfv") << "CcfvEngine: " << nquant << " asserted quantifiers in model"
                 << std::endl;
+
+  // Helper to build L based on trigger selection
+  std::unordered_map<Node, std::vector<Node>> apps = {};
+  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+  {
+    Node rep = *eqcs_i;
+    eq::EqClassIterator eqc_i(rep, ee);
+    while (!eqc_i.isFinished())
+    {
+      Node term = *eqc_i;
+      if (term.getKind() == Kind::APPLY_UF)
+      {
+        Node f = term.getOperator();
+        apps[f].push_back(term);
+      }
+      ++eqc_i;
+    }
+  }
 
   for (size_t i = 0; i < nquant; ++i)
   {
@@ -255,24 +292,6 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
       Trace("ccfv-debug") << "  " << patterns << std::endl;
     }
 
-    // Helper to build L based on trigger selection
-    std::unordered_map<Node, std::vector<Node>> apps = {};
-    for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
-    {
-      Node rep = *eqcs_i;
-      eq::EqClassIterator eqc_i(rep, ee);
-      while (!eqc_i.isFinished())
-      {
-        Node term = *eqc_i;
-        if (term.getKind() == Kind::APPLY_UF)
-        {
-          Node f = term.getOperator();
-          apps[f].push_back(term);
-        }
-        ++eqc_i;
-      }
-    }
-
     Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
     int addedLemmas = 0;
 
@@ -309,8 +328,13 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
         Trace("ccfv-debug")
             << "  Selecting grounded trigger: " << L << std::endl;
         std::vector<std::vector<Node>> substitutions;
-        if (d_solver->solve(
-                options().quantifiers.ccfvMode, freeVars, L, ee, substitutions))
+        bool solved = false;
+        {
+          TimerStat::CodeTimer timer(d_stats.d_solveTime);
+          solved = d_solver->solve(
+              options().quantifiers.ccfvMode, freeVars, L, ee, substitutions);
+        }
+        if (solved)
         {
           Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
                         << " substitutions for " << q << std::endl;
