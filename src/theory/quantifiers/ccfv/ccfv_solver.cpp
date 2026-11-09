@@ -13,6 +13,7 @@
 
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
 
+#include "base/exception.h"
 #include "base/output.h"
 #include "expr/node_algorithm.h"
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
@@ -509,12 +510,108 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
   return !substitutions.empty();
 }
 
+bool isPreprocessed(const std::vector<Node>& lits)
+{
+  for (const Node& eq : lits)
+  {
+    switch (eq.getKind())
+    {
+      case Kind::EQUAL:
+      {
+        Node l = eq[0], r = eq[1];
+
+        Node u0, u1, u2;
+        if (r.getKind() == Kind::HO_APPLY)
+        {
+          u0 = l;
+          u1 = r[0], u2 = r[1];
+        }
+        else if (l.getKind() == Kind::HO_APPLY)
+        {
+          u0 = r;
+          u1 = l[0], u2 = l[1];
+        }
+
+        if (u0.isNull() || u1.isNull() || u2.isNull())
+        {
+          return false;
+        }
+
+        if (!expr::hasFreeVar(u1) && !expr::hasFreeVar(u2))
+        {
+          return false;
+        }
+
+        continue;
+      }
+      case Kind::NOT:
+      {
+        if (eq[0].getKind() != Kind::EQUAL) return false;
+
+        Node x = eq[0], y = eq[1];
+
+        if (x.getKind() == Kind::BOUND_VARIABLE
+            && y.getKind() == Kind::BOUND_VARIABLE)
+        {
+          continue;
+        }
+
+        if (x.getKind() == Kind::BOUND_VARIABLE && !expr::hasFreeVar(y))
+        {
+          continue;
+        }
+
+        if (!expr::hasFreeVar(x) && y.getKind() == Kind::BOUND_VARIABLE)
+        {
+          continue;
+        }
+
+        return false;
+      }
+      default:
+      {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+std::vector<Node> preprocess(const std::vector<Node>& lits,
+                             eq::EqualityEngine* ee)
+{
+  std::vector<Node> preprocessedLits = lits;
+
+  // Normalizing
+
+  // Removing Ground Literals
+
+  // Flattening
+
+  // Trivial Assignments
+
+  return preprocessedLits;
+}
+
 bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
                           const std::vector<Node>& lits,
                           eq::EqualityEngine* ee,
-                          std::vector<std::vector<Node>>& solutions)
+                          std::vector<std::vector<Node>>& substitutions)
 {
-  // TODO: Implement CCFV SAT Encoding
+  std::vector<Node> preprocessedLits = lits;
+  if (!isPreprocessed(preprocessedLits))
+  {
+    throw Exception("Equations in L are not in the expected form");
+    // preprocessedLits = preprocess(lits, ee);
+  }
+
+  // Mutual Exclusion
+
+  // Floater Equivalence
+
+  // Cycle-based Constraints
+
   return false;
 }
 

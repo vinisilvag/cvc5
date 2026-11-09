@@ -148,13 +148,22 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
         {
           Trace("ccfv-debug") << "  Applying instantiation terms: " << freeVars
                               << " mapsto " << sub << std::endl;
+
+          std::cout << "[***] DEBUGGGGG " << std::endl;
+          std::cout << "  " << q[0] << std::endl;
+          std::cout << "  " << sub << std::endl;
+
+          // TODO: fix this later
+          // Workaround to avoid different free variables count after prenexing
+          std::vector<Node> origSub(sub.begin(),
+                                    sub.begin() + q[0].getNumChildren());
           if (qinst->addInstantiation(
-                  q, sub, InferenceId::QUANTIFIERS_INST_CBQI_CONFLICT))
+                  q, origSub, InferenceId::QUANTIFIERS_INST_CBQI_CONFLICT))
           {
             d_qstate.notifyConflictingInst();
             fm->markRelevant(q);
             // Conflict found and added
-            // Breaking from the loop after the addition
+            // Exiting the loop after the addition
             return;
           }
         }
@@ -296,7 +305,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
     int addedLemmas = 0;
 
     // Generating L candidates
-    // M algorithm from Knuth
+    // Knuth Odometer algorithm (The Art of Computer Programming, volume 4A)
     for (const std::vector<Node>& trigger : triggers)
     {
       size_t triggerSize = trigger.size();
