@@ -1,0 +1,27 @@
+(set-logic HO_UF)
+(set-info :smt-lib-version 2.6)
+(set-info :source | example.cc in ccfv-lib |)
+; Simple example to force two children variables to be equal
+; E = {c = h b, d = h a} and L = {f y2 = f a, x = g y1, x = z y2, w = h y1}
+
+(declare-sort U 0)
+
+(declare-const f (-> U U))
+(declare-const g (-> U U))
+(declare-const h (-> U U))
+(declare-const a U)
+(declare-const b U)
+(declare-const c U)
+(declare-const d U)
+
+(assert (= c (h b)))
+(assert (= d (h a)))
+
+(assert (forall ((w U) (x U) (y1 U) (y2 U) (z (-> U U))) 
+  (or (not (= (f y2) (f a))) 
+      (not (= x (g y1))) 
+      (not (= x (z y2))) 
+      (not (= w (h y1))))))
+
+(check-sat)
+(exit)

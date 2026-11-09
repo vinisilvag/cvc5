@@ -19,6 +19,7 @@
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 #include "theory/uf/equality_engine.h"
 #include "theory/uf/equality_engine_iterator.h"
+#include "theory/uf/theory_uf_rewriter.h"
 
 namespace cvc5::internal {
 namespace theory {
@@ -510,29 +511,52 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
   return !substitutions.empty();
 }
 
-bool isPreprocessed(const std::vector<Node>& lits)
+bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
 {
+  // TODO: check ex4. It should not pass, right?
+  std::cout << lits << std::endl;
   for (const Node& eq : lits)
   {
+    std::cout << "Checking for " << eq << std::endl;
     switch (eq.getKind())
     {
       case Kind::EQUAL:
       {
         Node l = eq[0], r = eq[1];
+        Node hoL = (l.getKind() == Kind::APPLY_UF)
+                       ? uf::TheoryUfRewriter::getHoApplyForApplyUf(l)
+                       : l;
+        Node hoR = (r.getKind() == Kind::APPLY_UF)
+                       ? uf::TheoryUfRewriter::getHoApplyForApplyUf(r)
+                       : r;
 
         Node u0, u1, u2;
-        if (r.getKind() == Kind::HO_APPLY)
+        if (hoR.getKind() == Kind::HO_APPLY && hoR.getNumChildren() == 2)
         {
-          u0 = l;
-          u1 = r[0], u2 = r[1];
+          u0 = hoL;
+          u1 = hoR[0];
+          u2 = hoR[1];
         }
-        else if (l.getKind() == Kind::HO_APPLY)
+        else if (hoL.getKind() == Kind::HO_APPLY && hoL.getNumChildren() == 2)
         {
-          u0 = r;
-          u1 = l[0], u2 = l[1];
+          u0 = hoR;
+          u1 = hoL[0];
+          u2 = hoL[1];
+        }
+        else
+        {
+          return false;
         }
 
-        if (u0.isNull() || u1.isNull() || u2.isNull())
+        if (u0.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u0))
+        {
+          return false;
+        }
+        if (u1.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u1))
+        {
+          return false;
+        }
+        if (u2.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u2))
         {
           return false;
         }
@@ -546,9 +570,12 @@ bool isPreprocessed(const std::vector<Node>& lits)
       }
       case Kind::NOT:
       {
-        if (eq[0].getKind() != Kind::EQUAL) return false;
+        if (eq[0].getKind() != Kind::EQUAL)
+        {
+          return false;
+        }
 
-        Node x = eq[0], y = eq[1];
+        Node x = eq[0][0], y = eq[0][1];
 
         if (x.getKind() == Kind::BOUND_VARIABLE
             && y.getKind() == Kind::BOUND_VARIABLE)
@@ -560,8 +587,7 @@ bool isPreprocessed(const std::vector<Node>& lits)
         {
           continue;
         }
-
-        if (!expr::hasFreeVar(x) && y.getKind() == Kind::BOUND_VARIABLE)
+        if (y.getKind() == Kind::BOUND_VARIABLE && !expr::hasFreeVar(x))
         {
           continue;
         }
@@ -581,7 +607,7 @@ bool isPreprocessed(const std::vector<Node>& lits)
 std::vector<Node> preprocess(const std::vector<Node>& lits,
                              eq::EqualityEngine* ee)
 {
-  std::vector<Node> preprocessedLits = lits;
+  std::vector<Node> preprocessedLits(lits.begin(), lits.end());
 
   // Normalizing
 
@@ -599,11 +625,9 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
                           eq::EqualityEngine* ee,
                           std::vector<std::vector<Node>>& substitutions)
 {
-  std::vector<Node> preprocessedLits = lits;
-  if (!isPreprocessed(preprocessedLits))
+  if (!isPreprocessed(lits))
   {
     throw Exception("Equations in L are not in the expected form");
-    // preprocessedLits = preprocess(lits, ee);
   }
 
   // Mutual Exclusion
