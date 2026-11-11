@@ -14,6 +14,7 @@
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
 
 #include <cstdlib>
+#include <unordered_map>
 
 #include "base/exception.h"
 #include "base/output.h"
@@ -560,9 +561,47 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
   return !substitutions.empty();
 }
 
+Node toHoApply(TNode n)
+{
+  if (n.getNumChildren() == 0)
+  {
+    return n;
+  }
+
+  bool changed = false;
+  std::vector<Node> children;
+  for (const Node& child : n)
+  {
+    Node newChild = toHoApply(child);
+    if (newChild != child)
+    {
+      changed = true;
+    }
+    children.push_back(newChild);
+  }
+
+  NodeManager* nm = n.getNodeManager();
+
+  if (n.getKind() == Kind::APPLY_UF)
+  {
+    Node curr = n.getOperator();
+    for (const Node& child : children)
+    {
+      curr = nm->mkNode(Kind::HO_APPLY, curr, child);
+    }
+    return curr;
+  }
+
+  if (!changed)
+  {
+    return n;
+  }
+
+  return nm->mkNode(n.getKind(), children);
+}
+
 bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
 {
-  // TODO: check ex4.
   std::cout << lits << std::endl;
   for (const Node& eq : lits)
   {
@@ -572,27 +611,21 @@ bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
       case Kind::EQUAL:
       {
         Node l = eq[0], r = eq[1];
-        Node hoL = (l.getKind() == Kind::APPLY_UF)
-                       ? uf::TheoryUfRewriter::getHoApplyForApplyUf(l)
-                       : l;
-        Node hoR = (r.getKind() == Kind::APPLY_UF)
-                       ? uf::TheoryUfRewriter::getHoApplyForApplyUf(r)
-                       : r;
-
         Node u0, u1, u2;
-        if (hoL.getKind() == Kind::HO_APPLY && hoL.getNumChildren() == 2
-            && expr::hasFreeVar(hoL))
+
+        if (l.getKind() == Kind::HO_APPLY && l.getNumChildren() == 2
+            && expr::hasFreeVar(l))
         {
-          u0 = hoR;
-          u1 = hoL[0];
-          u2 = hoL[1];
+          u0 = r;
+          u1 = l[0];
+          u2 = l[1];
         }
-        else if (hoR.getKind() == Kind::HO_APPLY && hoR.getNumChildren() == 2
-                 && expr::hasFreeVar(hoR))
+        else if (r.getKind() == Kind::HO_APPLY && r.getNumChildren() == 2
+                 && expr::hasFreeVar(r))
         {
-          u0 = hoL;
-          u1 = hoR[0];
-          u2 = hoR[1];
+          u0 = l;
+          u1 = r[0];
+          u2 = r[1];
         }
         else
         {
@@ -719,19 +752,15 @@ void CcfvSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
     {
       // u0 = u1 u2
       Node l = lit[0], r = lit[1];
-      Node hoL = (l.getKind() == Kind::APPLY_UF)
-                     ? uf::TheoryUfRewriter::getHoApplyForApplyUf(l)
-                     : l;
-      Node hoR = (r.getKind() == Kind::APPLY_UF)
-                     ? uf::TheoryUfRewriter::getHoApplyForApplyUf(r)
-                     : r;
-
-      Node u0 = (hoR.getKind() == Kind::HO_APPLY) ? hoL : hoR;
-      Node app = (hoR.getKind() == Kind::HO_APPLY) ? hoR : hoL;
+      Node u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l;
+      Node app = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
 
       addIfGround(u0);
-      addIfGround(app[0]);  // u1
-      addIfGround(app[1]);  // u2
+      if (app.getKind() == Kind::HO_APPLY)
+      {
+        addIfGround(app[0]);  // u1
+        addIfGround(app[1]);  // u2
+      }
     }
     else if (lit.getKind() == Kind::NOT && lit[0].getKind() == Kind::EQUAL)
     {
@@ -743,10 +772,38 @@ void CcfvSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
   }
 }
 
-std::vector<std::pair<Node, Node>> CcfvSolver::computeSignatures(
-    eq::EqualityEngine* ee)
+std::map<Node, std::vector<std::pair<Node, Node>>>
+CcfvSolver::computeSignatures(eq::EqualityEngine* ee)
 {
-  return {};
+  std::map<Node, std::set<std::pair<Node, Node>>> uniqueSignatures = {};
+
+  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+  {
+    Node rep0 = *eqcs_i;
+    eq::EqClassIterator eqc_i(rep0, ee);
+    while (!eqc_i.isFinished())
+    {
+      Node hoTerm = toHoApply(*eqc_i);
+      if (hoTerm.getKind() == Kind::HO_APPLY)
+      {
+        if (ee->hasTerm(hoTerm[0]) && ee->hasTerm(hoTerm[1]))
+        {
+          Node rep1 = ee->getRepresentative(hoTerm[0]);
+          Node rep2 = ee->getRepresentative(hoTerm[1]);
+          uniqueSignatures[rep0].insert({rep1, rep2});
+        }
+      }
+
+      ++eqc_i;
+    }
+  }
+
+  std::map<Node, std::vector<std::pair<Node, Node>>> signatures = {};
+  for (auto& [rep0, signatureSet] : uniqueSignatures)
+  {
+    signatures[rep0].assign(signatureSet.begin(), signatureSet.end());
+  }
+  return signatures;
 }
 
 bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
@@ -760,30 +817,40 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
   Trace("ccfv-debug") << "  CcfvEngine: freeVars = " << freeVars << std::endl;
   Trace("ccfv-debug") << "  CcfvEngine: L = " << lits << std::endl;
 
-  if (!isPreprocessed(lits))
+  // TODO: With simplifications enabled, the Equality Engine state changes
+  // substantially for some problems. Check if this causes some trouble or the
+  // encoding still solves it correctly.
+
+  // TODO: By default, cvc5 canonizes fully applied higher-order applications
+  // (HO_APPLY) into standard first-order applications (APPLY_UF). To simplify
+  // subsequent checks and keep the encoding purely binary/curried, we normalize
+  // all literals in L using `toHoApply`. Once the full preprocessing pipeline
+  // is implemented, this normalization may become redundant and can be removed.
+  std::vector<Node> hoLits = {};
+  for (const Node& lit : lits)
+  {
+    hoLits.push_back(toHoApply(lit));
+  }
+
+  Trace("ccfv-debug") << "  CcfvEngine: L (after normalization) = " << hoLits
+                      << std::endl;
+
+  if (!isPreprocessed(hoLits))
   {
     // TODO: preprocess instead of throwing an exception
     throw Exception("Equations in L are not in the expected form");
   }
 
-  // TODO: normalize L to swap all APPLY_UF with HO_APPLY to avoid using
-  // uf::TheoryUfRewriter::getHoApplyForApplyUf everywhere
+  // Ground terms that appear only in L have to be registered to be explicit
+  // in the Equality Engine reasoning
+  registerGroundTermsFromL(hoLits, ee);
 
-  // TODO:
-  // With simplifications enabled, the Equality Engine state changes
-  // substantially for some problems. Check if this causes some trouble or the
-  // encoding still solves correctly.
-
-  // Ground terms that appear only in L have to be registered to be explicit in
-  // the Equality Engine reasoning
-  // TODO: check if this is really necessary
-  registerGroundTermsFromL(lits, ee);
-
-  std::vector<std::pair<Node, Node>> signatures = computeSignatures(ee);
+  std::map<Node, std::vector<std::pair<Node, Node>>> signatures =
+      computeSignatures(ee);
 
   std::vector<Node> diseqs = {};
   std::vector<Node> eqs = {};
-  for (const Node& lit : lits)
+  for (const Node& lit : hoLits)
   {
     switch (lit.getKind())
     {
@@ -866,17 +933,9 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
   {
     Trace("ccfv-debug") << "      CcfvEngine: eq " << eq << std::endl;
     Node l = eq[0], r = eq[1];
-
-    Node hoL = (l.getKind() == Kind::APPLY_UF)
-                   ? uf::TheoryUfRewriter::getHoApplyForApplyUf(l)
-                   : l;
-    Node hoR = (r.getKind() == Kind::APPLY_UF)
-                   ? uf::TheoryUfRewriter::getHoApplyForApplyUf(r)
-                   : r;
-    Node app = (hoR.getKind() == Kind::HO_APPLY) ? hoR : hoL;
-
-    Node u0 = (hoR.getKind() == Kind::HO_APPLY) ? hoL : hoR, u1 = app[0],
-         u2 = app[1];
+    Node app = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
+    Node u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l,
+         u1 = app[0], u2 = app[1];
 
     // add stuff
   }

@@ -14,6 +14,7 @@
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 
+#include <unordered_map>
 #include <vector>
 
 #include "expr/node.h"
@@ -96,7 +97,8 @@ class CcfvSolver : protected EnvObj
   void registerGroundTermsFromL(const std::vector<Node>& lits,
                                 eq::EqualityEngine* ee);
 
-  std::vector<std::pair<Node, Node>> computeSignatures(eq::EqualityEngine* ee);
+  std::map<Node, std::vector<std::pair<Node, Node>>> computeSignatures(
+      eq::EqualityEngine* ee);
 
   /** Solves using the SAT encoding procedure. */
   bool solveSat(const std::vector<Node>& freeVars,
