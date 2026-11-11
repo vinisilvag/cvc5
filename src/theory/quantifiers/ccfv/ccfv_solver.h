@@ -18,6 +18,7 @@
 
 #include "expr/node.h"
 #include "options/quantifiers_options.h"
+#include "prop/sat_solver_types.h"
 #include "smt/env_obj.h"
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 
@@ -81,10 +82,21 @@ class CcfvSolver : protected EnvObj
       const ccfv::CcfvIndices& indices,
       std::vector<Node> currentSubstitution);
 
+  /** Encoded CCFV */
   bool isPreprocessed(const std::vector<Node>& lits);
 
   std::vector<Node> preprocess(const std::vector<Node>& lits,
                                eq::EqualityEngine* ee);
+
+  prop::SatVariable getPVar(TNode x, TNode rep, prop::SatSolver* solver);
+  prop::SatVariable getQVar(TNode x, prop::SatSolver* solver);
+  std::map<std::pair<Node, Node>, prop::SatVariable> d_pVars;
+  std::map<Node, prop::SatVariable> d_qVars;
+
+  void registerGroundTermsFromL(const std::vector<Node>& lits,
+                                eq::EqualityEngine* ee);
+
+  std::vector<std::pair<Node, Node>> computeSignatures(eq::EqualityEngine* ee);
 
   /** Solves using the SAT encoding procedure. */
   bool solveSat(const std::vector<Node>& freeVars,

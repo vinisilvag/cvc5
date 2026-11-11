@@ -13,9 +13,15 @@
 
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
 
+#include <cstdlib>
+
 #include "base/exception.h"
 #include "base/output.h"
 #include "expr/node_algorithm.h"
+#include "prop/minisat/minisat.h"
+#include "prop/sat_solver.h"
+#include "prop/sat_solver_factory.h"
+#include "prop/sat_solver_types.h"
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 #include "theory/uf/equality_engine.h"
 #include "theory/uf/equality_engine_iterator.h"
@@ -24,6 +30,49 @@
 namespace cvc5::internal {
 namespace theory {
 namespace quantifiers {
+
+void debugPrintEE(eq::EqualityEngine* ee)
+{
+  std::cout << "\n=================== EQUALITY ENGINE ==================="
+            << std::endl;
+  std::vector<Node> reps;
+  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+  {
+    reps.push_back(*eqcs_i);
+  }
+
+  for (size_t i = 0; i < reps.size(); ++i)
+  {
+    Node rep = reps[i];
+    std::cout << "[" << i << "] Rep: " << rep << " : " << rep.getType()
+              << std::endl;
+
+    std::cout << "     Members: [";
+    bool first = true;
+    for (eq::EqClassIterator eqc_i(rep, ee); !eqc_i.isFinished(); ++eqc_i)
+    {
+      if (!first) std::cout << ", ";
+      std::cout << *eqc_i;
+      first = false;
+    }
+    std::cout << "]" << std::endl;
+
+    std::cout << "     Disequal to: [";
+    first = true;
+    for (size_t j = 0; j < reps.size(); ++j)
+    {
+      if (i != j && ee->areDisequal(rep, reps[j], false))
+      {
+        if (!first) std::cout << ", ";
+        std::cout << reps[j];
+        first = false;
+      }
+    }
+    std::cout << "]" << std::endl;
+  }
+  std::cout << "=======================================================\n"
+            << std::endl;
+}
 
 CcfvSolver::CcfvSolver(Env& env) : EnvObj(env) {}
 
@@ -513,7 +562,7 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
 
 bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
 {
-  // TODO: check ex4. It should not pass, right?
+  // TODO: check ex4.
   std::cout << lits << std::endl;
   for (const Node& eq : lits)
   {
@@ -531,17 +580,19 @@ bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
                        : r;
 
         Node u0, u1, u2;
-        if (hoR.getKind() == Kind::HO_APPLY && hoR.getNumChildren() == 2)
-        {
-          u0 = hoL;
-          u1 = hoR[0];
-          u2 = hoR[1];
-        }
-        else if (hoL.getKind() == Kind::HO_APPLY && hoL.getNumChildren() == 2)
+        if (hoL.getKind() == Kind::HO_APPLY && hoL.getNumChildren() == 2
+            && expr::hasFreeVar(hoL))
         {
           u0 = hoR;
           u1 = hoL[0];
           u2 = hoL[1];
+        }
+        else if (hoR.getKind() == Kind::HO_APPLY && hoR.getNumChildren() == 2
+                 && expr::hasFreeVar(hoR))
+        {
+          u0 = hoL;
+          u1 = hoR[0];
+          u2 = hoR[1];
         }
         else
         {
@@ -620,22 +671,255 @@ std::vector<Node> preprocess(const std::vector<Node>& lits,
   return preprocessedLits;
 }
 
+prop::SatVariable CcfvSolver::getPVar(TNode x,
+                                      TNode rep,
+                                      prop::SatSolver* solver)
+{
+  auto it = d_pVars.find({x, rep});
+  if (it != d_pVars.end())
+  {
+    return it->second;
+  }
+  prop::SatVariable v = solver->newVar(false, false);
+  d_pVars[{x, rep}] = v;
+  Trace("ccfv-debug") << "    CcfvEngine: P_{" << x << ", [" << rep << "]} -> "
+                      << v << std::endl;
+  return v;
+}
+
+prop::SatVariable CcfvSolver::getQVar(TNode x, prop::SatSolver* solver)
+{
+  auto it = d_qVars.find(x);
+  if (it != d_qVars.end())
+  {
+    return it->second;
+  }
+  prop::SatVariable v = solver->newVar(false, false);
+  d_qVars[x] = v;
+  Trace("ccfv-debug") << "    CcfvEngine: Q_{" << x << "} -> " << v
+                      << std::endl;
+  return v;
+}
+
+void CcfvSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
+                                          eq::EqualityEngine* ee)
+{
+  auto addIfGround = [ee](TNode t) {
+    if (!expr::hasFreeVar(t) && !ee->hasTerm(t))
+    {
+      Trace("ccfv") << "    CcfvEngine: registering ground term " << t
+                    << " into EE" << std::endl;
+      ee->addTerm(t);
+    }
+  };
+
+  for (const Node& lit : lits)
+  {
+    if (lit.getKind() == Kind::EQUAL)
+    {
+      // u0 = u1 u2
+      Node l = lit[0], r = lit[1];
+      Node hoL = (l.getKind() == Kind::APPLY_UF)
+                     ? uf::TheoryUfRewriter::getHoApplyForApplyUf(l)
+                     : l;
+      Node hoR = (r.getKind() == Kind::APPLY_UF)
+                     ? uf::TheoryUfRewriter::getHoApplyForApplyUf(r)
+                     : r;
+
+      Node u0 = (hoR.getKind() == Kind::HO_APPLY) ? hoL : hoR;
+      Node app = (hoR.getKind() == Kind::HO_APPLY) ? hoR : hoL;
+
+      addIfGround(u0);
+      addIfGround(app[0]);  // u1
+      addIfGround(app[1]);  // u2
+    }
+    else if (lit.getKind() == Kind::NOT && lit[0].getKind() == Kind::EQUAL)
+    {
+      // x != u
+      Node x = lit[0][0], u = lit[0][1];
+      addIfGround(x);
+      addIfGround(u);
+    }
+  }
+}
+
+std::vector<std::pair<Node, Node>> CcfvSolver::computeSignatures(
+    eq::EqualityEngine* ee)
+{
+  return {};
+}
+
 bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
                           const std::vector<Node>& lits,
                           eq::EqualityEngine* ee,
                           std::vector<std::vector<Node>>& substitutions)
 {
+  Trace("ccfv") << "  CcfvEngine: solveSat with " << freeVars.size()
+                << " free variables, " << lits.size() << " literals"
+                << std::endl;
+  Trace("ccfv-debug") << "  CcfvEngine: freeVars = " << freeVars << std::endl;
+  Trace("ccfv-debug") << "  CcfvEngine: L = " << lits << std::endl;
+
   if (!isPreprocessed(lits))
   {
+    // TODO: preprocess instead of throwing an exception
     throw Exception("Equations in L are not in the expected form");
   }
 
+  // TODO: normalize L to swap all APPLY_UF with HO_APPLY to avoid using
+  // uf::TheoryUfRewriter::getHoApplyForApplyUf everywhere
+
+  // TODO:
+  // With simplifications enabled, the Equality Engine state changes
+  // substantially for some problems. Check if this causes some trouble or the
+  // encoding still solves correctly.
+
+  // Ground terms that appear only in L have to be registered to be explicit in
+  // the Equality Engine reasoning
+  // TODO: check if this is really necessary
+  registerGroundTermsFromL(lits, ee);
+
+  std::vector<std::pair<Node, Node>> signatures = computeSignatures(ee);
+
+  std::vector<Node> diseqs = {};
+  std::vector<Node> eqs = {};
+  for (const Node& lit : lits)
+  {
+    switch (lit.getKind())
+    {
+      case Kind::EQUAL:
+      {
+        eqs.push_back(lit);
+        break;
+      }
+      // Since we already checked the format, if lit.getKind() != Kind::EQUAL
+      // then it is, indeed, Kind::NOT and lit[0].getKind() is Kind::EQUAL
+      default:
+      {
+        diseqs.push_back(lit);
+        break;
+      }
+    }
+  }
+
+  Trace("ccfv") << "    CcfvEngine: " << eqs.size() << " equalities, "
+                << diseqs.size() << " disequalities" << std::endl;
+
+  d_pVars.clear();
+  d_qVars.clear();
+  std::unique_ptr<prop::SatSolver> satSolver(
+      prop::SatSolverFactory::createSatSolver<
+          options::BvSatSolverMode::CADICAL>(
+          d_env, d_env.getStatisticsRegistry(), d_env.getResourceManager()));
+
+  std::vector<prop::SatClause> clauses;
+
+  // Get disequal classes
+  std::vector<Node> allReps = {};
+  std::vector<std::pair<Node, Node>> diseqClasses = {};
+  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+  {
+    allReps.push_back(*eqcs_i);
+  }
+  for (size_t i = 0; i < allReps.size(); ++i)
+  {
+    for (size_t j = i + 1; j < allReps.size(); ++j)
+    {
+      if (ee->areDisequal(allReps[i], allReps[j], false))
+      {
+        diseqClasses.push_back({allReps[i], allReps[j]});
+      }
+    }
+  }
+
+  Trace("ccfv") << "    CcfvEngine: encoding negative core constraints"
+                << std::endl;
+  for (const Node& diseq : diseqs)
+  {
+    Trace("ccfv-debug") << "      CcfvEngine: diseq " << diseq << std::endl;
+    Node x, u;
+    switch (diseq[0][0].getKind())
+    {
+      case Kind::BOUND_VARIABLE:
+      {
+        x = diseq[0][0];
+        u = diseq[0][1];
+        break;
+      }
+      default:
+      {
+        x = diseq[0][1];
+        u = diseq[0][0];
+        break;
+      }
+    }
+
+    for (auto [rep1, rep2] : diseqClasses)
+    {
+      // add stuff
+    }
+  }
+
+  Trace("ccfv") << "    CcfvEngine: encoding positive core constraints"
+                << std::endl;
+  for (const Node& eq : eqs)
+  {
+    Trace("ccfv-debug") << "      CcfvEngine: eq " << eq << std::endl;
+    Node l = eq[0], r = eq[1];
+
+    Node hoL = (l.getKind() == Kind::APPLY_UF)
+                   ? uf::TheoryUfRewriter::getHoApplyForApplyUf(l)
+                   : l;
+    Node hoR = (r.getKind() == Kind::APPLY_UF)
+                   ? uf::TheoryUfRewriter::getHoApplyForApplyUf(r)
+                   : r;
+    Node app = (hoR.getKind() == Kind::HO_APPLY) ? hoR : hoL;
+
+    Node u0 = (hoR.getKind() == Kind::HO_APPLY) ? hoL : hoR, u1 = app[0],
+         u2 = app[1];
+
+    // add stuff
+  }
+
   // Mutual Exclusion
+  Trace("ccfv") << "    CcfvEngine: encoding mutual exclusion constraints"
+                << std::endl;
+  for (const Node& var : freeVars)
+  {
+    for (const Node& rep : allReps)
+    {
+    }
+  }
 
   // Floater Equivalence
 
   // Cycle-based Constraints
 
+  Trace("ccfv") << "    CcfvEngine: adding " << clauses.size()
+                << " clauses to SAT solver" << std::endl;
+  for (const prop::SatClause& clause : clauses)
+  {
+    Trace("ccfv-debug") << "      CcfvEngine: clause " << clause << std::endl;
+    satSolver->addClause(clause, false);
+  }
+
+  // Check the encoding first before continuing
+  return false;
+
+  Trace("ccfv") << "    CcfvEngine: invoking SAT solver" << std::endl;
+  prop::SatValue result = satSolver->solve();
+  Trace("ccfv") << "    CcfvEngine: SAT solver returned " << result
+                << std::endl;
+  if (result == prop::SAT_VALUE_TRUE)
+  {
+    Trace("ccfv") << "    CcfvEngine: SAT solution found" << std::endl;
+    // Extract the result
+    // Populate the substitutions parameter
+    return true;
+  }
+
+  Trace("ccfv") << "    CcfvEngine: SAT returned unsat, no solution"
+                << std::endl;
   return false;
 }
 
