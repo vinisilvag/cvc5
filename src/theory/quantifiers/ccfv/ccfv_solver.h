@@ -89,10 +89,10 @@ class CcfvSolver : protected EnvObj
   std::vector<Node> preprocess(const std::vector<Node>& lits,
                                eq::EqualityEngine* ee);
 
-  prop::SatVariable getPVar(TNode x, TNode rep, prop::SatSolver* solver);
-  prop::SatVariable getQVar(TNode x, prop::SatSolver* solver);
-  std::map<std::pair<Node, Node>, prop::SatVariable> d_pVars;
-  std::map<Node, prop::SatVariable> d_qVars;
+  Node getNodePVar(TNode x, TNode rep);
+  Node getNodeQVar(TNode x);
+  std::map<std::pair<Node, Node>, Node> d_pNodes;
+  std::map<Node, Node> d_qNodes;
 
   void registerGroundTermsFromL(const std::vector<Node>& lits,
                                 eq::EqualityEngine* ee);
