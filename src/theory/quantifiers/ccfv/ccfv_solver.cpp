@@ -850,12 +850,12 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
                 << std::endl;
   hoccfvUtils.computeFloaterEquivalences();
 
-  // // Ground and Type Constraints for floaters
-  // Trace("ccfv")
-  //     << "    CcfvEngine: solving ground and type constraints for floaters"
-  //     << std::endl;
-  // hoccfvUtils.applyGroundOrTypeConstraints();
-  //
+  // Ground or Type Constraints for floaters
+  Trace("ccfv")
+      << "    CcfvEngine: solving ground and type constraints for floaters"
+      << std::endl;
+  hoccfvUtils.applyGroundOrTypeConstraints();
+
   // // Cycle Detection
   // Trace("ccfv") << "    CcfvEngine: computing the floater-dependency graph to
   // "
@@ -1090,8 +1090,10 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
   }
 
   // Floater Constraints
+  // TODO:
 
   // Cycle-based Constraints
+  // TODO:
 
   Trace("ccfv") << "    CcfvEngine: invoking SAT solver" << std::endl;
   prop::SatValue result = satSolver->solve();

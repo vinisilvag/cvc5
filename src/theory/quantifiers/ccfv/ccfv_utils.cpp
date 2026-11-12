@@ -686,12 +686,12 @@ void HoccfvUtils::computeFloaterEquivalences()
 
 void HoccfvUtils::applyGroundOrTypeConstraints()
 {
-  for (const Node& var : d_freeVars)
+  for (TNode var : d_freeVars)
   {
     d_floatable[var] = true;
   }
 
-  for (const Node& lit : d_lits)
+  for (TNode lit : d_lits)
   {
     if (lit.getKind() == Kind::NOT)
     {
@@ -705,14 +705,157 @@ void HoccfvUtils::applyGroundOrTypeConstraints()
     }
 
     Node u0 = (l.getKind() == Kind::BOUND_VARIABLE) ? l : r;
-    Node app = (l.getKind() == Kind::BOUND_VARIABLE) ? r : l, u1 = app[0],
-         u2 = app[1];
+    Node u = (l.getKind() == Kind::BOUND_VARIABLE) ? r : l;
 
-    // do stuff
+    if (u0.getKind() != Kind::BOUND_VARIABLE || u.getKind() != Kind::HO_APPLY)
+    {
+      continue;
+    }
+
+    Node x = d_dsu->find(u0);
+    for (size_t i = 0; i < 2; ++i)
+    {
+      bool isGround = !expr::hasFreeVar(u[i]);
+      TNode childNode = d_dsu->getChild(x, i);
+
+      if (!childNode.isNull())
+      {
+        Node y = d_dsu->find(childNode);
+        if (y.getType() != u[i].getType() || isGround)
+        {
+          d_floatable[y] = false;
+        }
+      }
+
+      if (isGround)
+      {
+        Node repUi = d_dsu->find(u[i]);
+        auto it = d_ground[i].find(x);
+        if (it != d_ground[i].end())
+        {
+          d_floatable[x] = d_floatable[x] && (repUi == it->second);
+        }
+        else
+        {
+          d_ground[i][x] = repUi;
+        }
+      }
+    }
   }
+
+  debugPrintGroundOrTypeConstraints();
 }
 
-void HoccfvUtils::computeFloaterDependencyGraph() {}
+void HoccfvUtils::debugPrintGroundOrTypeConstraints(std::ostream& out)
+{
+  out << "=========== Ground and Type Constraints Report ==========="
+      << std::endl;
+
+  std::map<Node, std::vector<Node>> classes;
+  for (TNode var : d_freeVars)
+  {
+    classes[d_dsu->find(var)].push_back(var);
+  }
+
+  if (classes.empty())
+  {
+    out << "  (No variable registered)" << std::endl;
+  }
+
+  for (const auto& [root, members] : classes)
+  {
+    bool floatable = isFloatable(root);
+
+    out << "Classe [" << root << "] "
+        << (floatable ? "[FLOATABLE]" : "[BLOCKED: NOT FLOATABLE]")
+        << std::endl;
+    out << "  - Type: " << root.getType() << std::endl;
+    out << "  - Members: { ";
+    for (size_t i = 0; i < members.size(); ++i)
+    {
+      out << members[i] << (i + 1 < members.size() ? ", " : " ");
+    }
+    out << "}" << std::endl;
+
+    Node c0 = d_dsu->getChild(root, 0);
+    Node c1 = d_dsu->getChild(root, 1);
+    if (!c0.isNull() || !c1.isNull())
+    {
+      out << "  - Structured children: (" << (c0.isNull() ? "?" : c0.toString())
+          << " @ " << (c1.isNull() ? "?" : c1.toString()) << ")" << std::endl;
+    }
+
+    auto itG0 = d_ground[0].find(root);
+    auto itG1 = d_ground[1].find(root);
+    if (itG0 != d_ground[0].end() || itG1 != d_ground[1].end())
+    {
+      out << "  - Ground fixed children: ("
+          << (itG0 != d_ground[0].end() ? itG0->second.toString() : "-")
+          << " @ "
+          << (itG1 != d_ground[1].end() ? itG1->second.toString() : "-") << ")"
+          << std::endl;
+    }
+    out << "----------------------------------------------------------"
+        << std::endl;
+  }
+  out << "=========================================================="
+      << std::endl;
+}
+
+void HoccfvUtils::computeFloaterDependencyGraph()
+{
+  std::map<Node, size_t> index;
+  std::map<Node, size_t> low;
+  std::map<Node, bool> onStack;
+
+  for (TNode var : d_freeVars)
+  {
+    if (!d_dsu->getChild(var, 0).isNull())
+    {
+      d_dsu->setChild(var, 0, d_dsu->find(d_dsu->getChild(var, 0)));
+    }
+    if (!d_dsu->getChild(var, 1).isNull())
+    {
+      d_dsu->setChild(var, 1, d_dsu->find(d_dsu->getChild(var, 1)));
+    }
+
+    index[var] = 0;
+    low[var] = 0;
+    onStack[var] = false;
+  }
+
+  size_t counter = 1;
+  std::vector<Node> S = {};
+
+  auto strongConnect = [&](TNode x) {
+    index[x] = counter;
+    low[x] = counter;
+    onStack[x] = true;
+    S.push_back(x);
+    counter++;
+
+    for (size_t i = 0; i < 2; ++i)
+    {
+    }
+
+    if (low[x] == index[x])
+    {
+    }
+  };
+
+  for (TNode var : d_freeVars)
+  {
+    auto itIndex = index.find(d_dsu->find(var));
+    if (itIndex != index.end())
+
+    {
+      if (itIndex->second == 0)
+      {
+        strongConnect(d_dsu->find(var));
+      }
+    }
+  }
+}
 
 }  // namespace ccfv
 }  // namespace quantifiers

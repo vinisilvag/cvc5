@@ -215,6 +215,13 @@ class HoccfvUtils
   const FloatersUnionFind* getDsu() const { return d_dsu.get(); }
   FloatersUnionFind* getDsu() { return d_dsu.get(); }
 
+  bool isFloatable(TNode var)
+  {
+    Node root = d_dsu->find(var);
+    auto it = d_floatable.find(root);
+    return (it != d_floatable.end()) ? it->second : false;
+  }
+
   void debugPrintFloaterEquivalences() const
   {
     if (d_dsu)
@@ -222,6 +229,7 @@ class HoccfvUtils
       d_dsu->debugPrint();
     }
   }
+  void debugPrintGroundOrTypeConstraints(std::ostream& out = std::cout);
 
  private:
   std::unique_ptr<FloatersUnionFind> d_dsu;
@@ -229,6 +237,7 @@ class HoccfvUtils
   std::vector<Node> d_freeVars;
   std::vector<Node> d_lits;
   std::map<Node, bool> d_floatable;
+  std::map<Node, Node> d_ground[2];
 };
 
 }  // namespace ccfv
