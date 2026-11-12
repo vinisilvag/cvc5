@@ -45,7 +45,7 @@ using NodePairHash =
  * @return true if n is an atomic formula, a negated atomic formula, or a
  * boolean constant.
  */
-inline bool isLiteral(Node n)
+inline bool isLiteral(TNode n)
 {
   if (n.getKind() == Kind::NOT)
   {
@@ -69,12 +69,12 @@ inline bool isLiteral(Node n)
  * @param n The node to inspect.
  * @return true if n is a literal or an OR node containing only literals.
  */
-inline bool isClause(Node n)
+inline bool isClause(TNode n)
 {
   if (isLiteral(n) || n.isConst()) return true;
   if (n.getKind() == Kind::OR)
   {
-    for (const Node& c : n)
+    for (TNode c : n)
     {
       if (!isLiteral(c) && !c.isConst()) return false;
     }
@@ -91,7 +91,7 @@ inline bool isClause(Node n)
  * @param n A quantified formula.
  * @return true if the formula is a single clause or an AND of clauses.
  */
-inline bool isCnf(Node n)
+inline bool isCnf(TNode n)
 {
   while (n.getKind() == Kind::FORALL)
   {
@@ -100,7 +100,7 @@ inline bool isCnf(Node n)
   if (isClause(n)) return true;
   if (n.getKind() == Kind::AND)
   {
-    for (const Node& c : n)
+    for (TNode c : n)
     {
       if (!isClause(c)) return false;
     }
@@ -123,7 +123,9 @@ inline bool isCnf(Node n)
  * @return The normalized formula in NNF, or Node::null() if an unsupported node
  * is found.
  */
-Node computeNnf(NodeManager* nm, Node n, bool pol);
+Node computeNnf(NodeManager* nm, TNode n, bool pol);
+
+Node skolemize(NodeManager* nm, TNode n, std::vector<Node>& freeVars);
 
 /**
  * Prenexes an NNF formula by lifting all universal quantifiers to the outer
@@ -137,9 +139,9 @@ Node computeNnf(NodeManager* nm, Node n, bool pol);
  * @param vars Output vector collecting all universal bound variables.
  * @return The quantifier-free boolean matrix, or Node::null() on error.
  */
-Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars);
+Node computePrenex(NodeManager* nm, TNode n, std::vector<Node>& vars);
 
-std::vector<std::vector<Node>> toCnf(Node n);
+std::vector<std::vector<Node>> toCnf(TNode n);
 
 /**
  * Full preprocessing pipeline converting an asserted quantifier into CNF for
@@ -155,19 +157,19 @@ std::vector<std::vector<Node>> toCnf(Node n);
  * @param clauses Output collection receiving the generated CNF clauses.
  * @return true if the quantifier was successfully converted, false otherwise.
  */
-bool computeQuantCnf(Node q,
+bool computeQuantCnf(TNode q,
                      std::vector<Node>& vars,
                      std::vector<std::vector<Node>>& clauses);
 
-bool isSupportedTriggerTerm(Node n);
+bool isSupportedTriggerTerm(TNode n);
 
 class CcfvIndices
 {
  public:
   CcfvIndices(eq::EqualityEngine* ee);
-  const std::vector<Node>& getDiseqs(Node t) const;
-  const std::vector<Node>& getReps(Node f) const;
-  const std::vector<Node>& getApps(Node f, Node t) const;
+  const std::vector<Node>& getDiseqs(TNode t) const;
+  const std::vector<Node>& getReps(TNode f) const;
+  const std::vector<Node>& getApps(TNode f, TNode t) const;
 
  private:
   eq::EqualityEngine* d_ee;
@@ -177,6 +179,56 @@ class CcfvIndices
   std::unordered_map<Node, std::vector<Node>> reps;
 
   static const std::vector<Node> s_empty;
+};
+
+class FloatersUnionFind
+{
+ public:
+  FloatersUnionFind() = default;
+  FloatersUnionFind(const std::vector<Node>& xs);
+
+  Node find(TNode x);
+  void merge(TNode x, TNode y, std::vector<std::pair<Node, Node>>& toMerge);
+  bool areEquivalent(TNode x, TNode y);
+
+  Node getChild(TNode rep, size_t index) const;
+  void setChild(TNode rep, size_t index, TNode x);
+  bool hasChildren(TNode rep) const;
+
+  void debugPrint(std::ostream& out = std::cout);
+
+ private:
+  std::map<Node, Node> d_representative;
+  std::map<Node, Node> d_child[2];
+};
+
+class HoccfvUtils
+{
+ public:
+  HoccfvUtils(const std::vector<Node>& freeVars, const std::vector<Node>& lits);
+  ~HoccfvUtils() = default;
+
+  void computeFloaterEquivalences();
+  void applyGroundOrTypeConstraints();
+  void computeFloaterDependencyGraph();
+
+  const FloatersUnionFind* getDsu() const { return d_dsu.get(); }
+  FloatersUnionFind* getDsu() { return d_dsu.get(); }
+
+  void debugPrintFloaterEquivalences() const
+  {
+    if (d_dsu)
+    {
+      d_dsu->debugPrint();
+    }
+  }
+
+ private:
+  std::unique_ptr<FloatersUnionFind> d_dsu;
+
+  std::vector<Node> d_freeVars;
+  std::vector<Node> d_lits;
+  std::map<Node, bool> d_floatable;
 };
 
 }  // namespace ccfv

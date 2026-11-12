@@ -92,7 +92,7 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
 
   for (size_t i = 0; i < nquant; ++i)
   {
-    Node q = fm->getAssertedQuantifier(i, true);
+    TNode q = fm->getAssertedQuantifier(i, true);
     if (!fm->isQuantifierActive(q))
     {
       continue;
@@ -128,7 +128,7 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
       Trace("ccfv-debug") << "  Instantiating for clause: " << clause
                           << std::endl;
       std::vector<Node> L;
-      for (const Node& lit : clause)
+      for (TNode lit : clause)
       {
         L.push_back(lit.negate());
       }
@@ -199,14 +199,14 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
   std::unordered_map<Node, std::vector<Node>> apps = {};
   for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
   {
-    Node rep = *eqcs_i;
+    TNode rep = *eqcs_i;
     eq::EqClassIterator eqc_i(rep, ee);
     while (!eqc_i.isFinished())
     {
-      Node term = *eqc_i;
+      TNode term = *eqc_i;
       if (term.getKind() == Kind::APPLY_UF)
       {
-        Node f = term.getOperator();
+        TNode f = term.getOperator();
         apps[f].push_back(term);
       }
       ++eqc_i;
@@ -215,7 +215,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
 
   for (size_t i = 0; i < nquant; ++i)
   {
-    Node q = fm->getAssertedQuantifier(i, true);
+    TNode q = fm->getAssertedQuantifier(i, true);
     if (!fm->isQuantifierActive(q))
     {
       continue;
@@ -230,7 +230,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
     {
       Trace("ccfv-debug") << "CcfvEngine: User-defined triggers: " << q[2]
                           << std::endl;
-      for (const Node& userPattern : q[2])
+      for (TNode userPattern : q[2])
       {
         if (userPattern.getKind() != Kind::INST_PATTERN)
         {
@@ -238,7 +238,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
         }
 
         std::vector<Node> patList = {};
-        for (const Node& pattern : userPattern)
+        for (TNode pattern : userPattern)
         {
           if (ccfv::isSupportedTriggerTerm(pattern))
           {
@@ -311,7 +311,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
       size_t triggerSize = trigger.size();
       bool canMatch = true;
 
-      for (const Node& pat : trigger)
+      for (TNode pat : trigger)
       {
         if (apps[pat.getOperator()].empty())
         {
@@ -329,8 +329,8 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
 
         for (size_t k = 0; k < triggerSize; ++k)
         {
-          Node f = trigger[k].getOperator();
-          Node t = apps[f][idx[k]];
+          TNode f = trigger[k].getOperator();
+          TNode t = apps[f][idx[k]];
           L.push_back(trigger[k].eqNode(t));
         }
 

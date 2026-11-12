@@ -146,7 +146,7 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
   {
     case Kind::EQUAL:
     {
-      Node l = c[0], r = c[1];
+      TNode l = c[0], r = c[1];
 
       // Syntactic equality
       // s = s
@@ -200,8 +200,8 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       if (l.getKind() == Kind::BOUND_VARIABLE
           || r.getKind() == Kind::BOUND_VARIABLE)
       {
-        Node variable = (l.getKind() == Kind::BOUND_VARIABLE ? l : r);
-        Node term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
+        TNode variable = (l.getKind() == Kind::BOUND_VARIABLE ? l : r);
+        TNode term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
 
         Trace("ccfv") << "    CcfvEngine: assignment (" << variable << " = "
                       << term << ")" << std::endl;
@@ -256,9 +256,9 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
           || (!ee->hasTerm(r) && r.hasOperator() && lIsGround
               && ee->hasTerm(l)))
       {
-        Node fTerm = ee->hasTerm(r) ? l : r;
-        Node t = ee->hasTerm(r) ? r : l;
-        Node op = fTerm.getOperator();
+        TNode fTerm = ee->hasTerm(r) ? l : r;
+        TNode t = ee->hasTerm(r) ? r : l;
+        TNode op = fTerm.getOperator();
 
         Trace("ccfv") << "    CcfvEngine: E-Matching UF with ground term ("
                       << fTerm << " = " << t << ")" << std::endl;
@@ -572,7 +572,7 @@ Node toHoApply(TNode n)
 
   bool changed = false;
   std::vector<Node> children;
-  for (const Node& child : n)
+  for (TNode child : n)
   {
     Node newChild = toHoApply(child);
     if (newChild != child)
@@ -604,16 +604,14 @@ Node toHoApply(TNode n)
 
 bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
 {
-  std::cout << lits << std::endl;
-  for (const Node& eq : lits)
+  for (TNode eq : lits)
   {
-    std::cout << "Checking for " << eq << std::endl;
     switch (eq.getKind())
     {
       case Kind::EQUAL:
       {
-        Node l = eq[0], r = eq[1];
-        Node u0, u1, u2;
+        TNode l = eq[0], r = eq[1];
+        TNode u0, u1, u2;
 
         if (l.getKind() == Kind::HO_APPLY && l.getNumChildren() == 2
             && expr::hasFreeVar(l))
@@ -661,7 +659,7 @@ bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
           return false;
         }
 
-        Node x = eq[0][0], y = eq[0][1];
+        TNode x = eq[0][0], y = eq[0][1];
 
         if (x.getKind() == Kind::BOUND_VARIABLE
             && y.getKind() == Kind::BOUND_VARIABLE)
@@ -706,7 +704,7 @@ std::vector<Node> preprocess(const std::vector<Node>& lits,
   return preprocessedLits;
 }
 
-Node CcfvSolver::getNodePVar(TNode x, TNode rep)
+Node CcfvSolver::getPVar(TNode x, TNode rep)
 {
   auto it = d_pNodes.find({x, rep});
   if (it != d_pNodes.end())
@@ -720,7 +718,7 @@ Node CcfvSolver::getNodePVar(TNode x, TNode rep)
   return v;
 }
 
-Node CcfvSolver::getNodeQVar(TNode x)
+Node CcfvSolver::getQVar(TNode x)
 {
   auto it = d_qNodes.find(x);
   if (it != d_qNodes.end())
@@ -745,14 +743,15 @@ void CcfvSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
     }
   };
 
-  for (const Node& lit : lits)
+  for (TNode lit : lits)
   {
     if (lit.getKind() == Kind::EQUAL)
     {
       // u0 = u1 u2
-      Node l = lit[0], r = lit[1];
-      Node u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l;
-      Node app = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
+      TNode l = lit[0], r = lit[1];
+      TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l;
+      TNode app =
+          (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
 
       addIfGround(u0);
       if (app.getKind() == Kind::HO_APPLY)
@@ -764,7 +763,7 @@ void CcfvSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
     else if (lit.getKind() == Kind::NOT && lit[0].getKind() == Kind::EQUAL)
     {
       // x != u
-      Node x = lit[0][0], u = lit[0][1];
+      TNode x = lit[0][0], u = lit[0][1];
       addIfGround(x);
       addIfGround(u);
     }
@@ -778,7 +777,7 @@ CcfvSolver::computeSignatures(eq::EqualityEngine* ee)
 
   for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
   {
-    Node rep0 = *eqcs_i;
+    TNode rep0 = *eqcs_i;
     eq::EqClassIterator eqc_i(rep0, ee);
     while (!eqc_i.isFinished())
     {
@@ -844,29 +843,51 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
   // Ground terms that appear only in L have to be registered to be explicit
   // in the Equality Engine reasoning
   registerGroundTermsFromL(hoLits, ee);
+  ccfv::HoccfvUtils hoccfvUtils(freeVars, hoLits);
+
+  // Floater Equivalence
+  Trace("ccfv") << "    CcfvEngine: computing floater equivalences"
+                << std::endl;
+  hoccfvUtils.computeFloaterEquivalences();
+
+  // // Ground and Type Constraints for floaters
+  // Trace("ccfv")
+  //     << "    CcfvEngine: solving ground and type constraints for floaters"
+  //     << std::endl;
+  // hoccfvUtils.applyGroundOrTypeConstraints();
+  //
+  // // Cycle Detection
+  // Trace("ccfv") << "    CcfvEngine: computing the floater-dependency graph to
+  // "
+  //                  "detect cycle variables"
+  //               << std::endl;
+  // hoccfvUtils.computeFloaterDependencyGraph();
+
+  return false;
 
   std::map<Node, std::vector<std::pair<Node, Node>>> signatures =
       computeSignatures(ee);
 
-  std::vector<Node> diseqs = {};
-  std::vector<Node> eqs = {};
+  std::vector<Node> negativeConstraints = {};
+  std::vector<Node> positiveConstraints = {};
   for (const Node& lit : hoLits)
   {
     if (lit.getKind() == Kind::EQUAL)
     {
-      eqs.push_back(lit);
+      positiveConstraints.push_back(lit);
     }
     else
     {
       // Since we already guarded the format of literals in L, if lit.getKind()
       // != Kind::EQUAL then it is, for sure, Kind::NOT and lit[0].getKind() is
       // Kind::EQUAL
-      diseqs.push_back(lit);
+      negativeConstraints.push_back(lit);
     }
   }
 
-  Trace("ccfv") << "    CcfvEngine: " << eqs.size() << " equalities, "
-                << diseqs.size() << " disequalities" << std::endl;
+  Trace("ccfv") << "    CcfvEngine: " << positiveConstraints.size()
+                << " equalities, " << negativeConstraints.size()
+                << " disequalities" << std::endl;
 
   d_pNodes.clear();
   d_qNodes.clear();
@@ -905,29 +926,20 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
     }
   }
 
-  // TODO: solve this
-  // Floater Equivalence
-  Trace("ccfv") << "    CcfvEngine: solving floater equivalence" << std::endl;
-
-  // Ground and Type Constraints
-  Trace("ccfv") << "    CcfvEngine: solving ground and type constraints"
-                << std::endl;
-
-  // Cycle-based Constraints
-  Trace("ccfv") << "    CcfvEngine: solving cycle-based constraints"
-                << std::endl;
-
   // Core Encoding
   Trace("ccfv") << "    CcfvEngine: starting to generate the core encoding"
                 << std::endl;
   Trace("ccfv") << "    CcfvEngine: encoding negative constraints" << std::endl;
-  for (const Node& diseq : diseqs)
+  for (TNode negConstraint : negativeConstraints)
   {
-    Trace("ccfv-debug") << "      CcfvEngine: diseq " << diseq << std::endl;
-    Node x = (diseq[0][0].getKind() == Kind::BOUND_VARIABLE) ? diseq[0][0]
-                                                             : diseq[0][1];
-    Node u = (diseq[0][0].getKind() == Kind::BOUND_VARIABLE) ? diseq[0][1]
-                                                             : diseq[0][0];
+    Trace("ccfv-debug") << "      CcfvEngine: diseq " << negConstraint
+                        << std::endl;
+    TNode x = (negConstraint[0][0].getKind() == Kind::BOUND_VARIABLE)
+                  ? negConstraint[0][0]
+                  : negConstraint[0][1];
+    TNode u = (negConstraint[0][0].getKind() == Kind::BOUND_VARIABLE)
+                  ? negConstraint[0][1]
+                  : negConstraint[0][0];
 
     std::vector<Node> disjuncts = {};
 
@@ -937,11 +949,11 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
       // representatives are different than the representativa of u. We create
       // a disjunction of every P_x_[t] for all [t] != [u].
       Node repU = ee->getRepresentative(u);
-      for (const Node& rep : allReps)
+      for (TNode rep : allReps)
       {
         if (rep.getType() == x.getType() && rep != repU)
         {
-          disjuncts.push_back(getNodePVar(x, rep));
+          disjuncts.push_back(getPVar(x, rep));
         }
       }
     }
@@ -955,10 +967,10 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
       {
         if (rep1.getType() == x.getType() && rep2.getType() == u.getType())
         {
-          disjuncts.push_back(nm->mkNode(
-              Kind::AND, getNodePVar(x, rep1), getNodePVar(u, rep2)));
-          disjuncts.push_back(nm->mkNode(
-              Kind::AND, getNodePVar(x, rep2), getNodePVar(u, rep1)));
+          disjuncts.push_back(
+              nm->mkNode(Kind::AND, getPVar(x, rep1), getPVar(u, rep2)));
+          disjuncts.push_back(
+              nm->mkNode(Kind::AND, getPVar(x, rep2), getPVar(u, rep1)));
         }
       }
     }
@@ -967,13 +979,14 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
   }
 
   Trace("ccfv") << "    CcfvEngine: encoding positive constraints" << std::endl;
-  for (const Node& eq : eqs)
+  for (TNode posConstraint : positiveConstraints)
   {
-    Trace("ccfv-debug") << "      CcfvEngine: eq " << eq << std::endl;
-    Node l = eq[0], r = eq[1];
-    Node app = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
-    Node u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l,
-         u1 = app[0], u2 = app[1];
+    Trace("ccfv-debug") << "      CcfvEngine: eq " << posConstraint
+                        << std::endl;
+    TNode l = posConstraint[0], r = posConstraint[1];
+    TNode app = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
+    TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l,
+          u1 = app[0], u2 = app[1];
 
     std::vector<Node> disjuncts = {};
 
@@ -981,10 +994,10 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
     {
       // If u0 is a variable, it may be a floater (i.e. assigned outside of
       // E^cc)
-      disjuncts.push_back(getNodeQVar(u0));
+      disjuncts.push_back(getQVar(u0));
 
       // Otherwise, u0 is mapped to some class [t0] in E^cc of compatible type
-      for (const Node& rep0 : allReps)
+      for (TNode rep0 : allReps)
       {
         if (u0.getType() == rep0.getType())
         {
@@ -1004,11 +1017,11 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
             // Collect active P-predicates for remaining free variables
             std::vector<Node> conjuncts;
             if (u0.getKind() == Kind::BOUND_VARIABLE)
-              conjuncts.push_back(getNodePVar(u0, rep0));
+              conjuncts.push_back(getPVar(u0, rep0));
             if (u1.getKind() == Kind::BOUND_VARIABLE)
-              conjuncts.push_back(getNodePVar(u1, rep1));
+              conjuncts.push_back(getPVar(u1, rep1));
             if (u2.getKind() == Kind::BOUND_VARIABLE)
-              conjuncts.push_back(getNodePVar(u2, rep2));
+              conjuncts.push_back(getPVar(u2, rep2));
 
             disjuncts.push_back(nm->mkAnd(conjuncts));
           }
@@ -1032,15 +1045,15 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
 
         std::vector<Node> conjuncts;
         if (u1.getKind() == Kind::BOUND_VARIABLE)
-          conjuncts.push_back(getNodePVar(u1, rep1));
+          conjuncts.push_back(getPVar(u1, rep1));
         if (u2.getKind() == Kind::BOUND_VARIABLE)
-          conjuncts.push_back(getNodePVar(u2, rep2));
+          conjuncts.push_back(getPVar(u2, rep2));
 
         disjuncts.push_back(nm->mkAnd(conjuncts));
       }
-
-      cnfStream.convertAndAssert(nm->mkOr(disjuncts), false, false);
     }
+
+    cnfStream.convertAndAssert(nm->mkOr(disjuncts), false, false);
   }
 
   // Mutual Exclusion
@@ -1075,6 +1088,10 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
       }
     }
   }
+
+  // Floater Constraints
+
+  // Cycle-based Constraints
 
   Trace("ccfv") << "    CcfvEngine: invoking SAT solver" << std::endl;
   prop::SatValue result = satSolver->solve();

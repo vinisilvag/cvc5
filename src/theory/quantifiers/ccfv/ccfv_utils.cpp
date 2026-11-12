@@ -23,7 +23,7 @@ namespace quantifiers {
 namespace ccfv {
 
 // TODO: Tseitin transformation? Check with Haniel later
-Node computeNnf(NodeManager* nm, Node n, bool pol)
+Node computeNnf(NodeManager* nm, TNode n, bool pol)
 {
   switch (n.getKind())
   {
@@ -40,7 +40,7 @@ Node computeNnf(NodeManager* nm, Node n, bool pol)
       Kind targetKind = pol ? Kind::AND : Kind::OR;
       std::vector<Node> children;
 
-      for (const Node& nn : n)
+      for (TNode nn : n)
       {
         Node nnf = computeNnf(nm, nn, pol);
         if (nnf.isNull())
@@ -67,7 +67,7 @@ Node computeNnf(NodeManager* nm, Node n, bool pol)
       Kind targetKind = pol ? Kind::OR : Kind::AND;
       std::vector<Node> children;
 
-      for (const Node& nn : n)
+      for (TNode nn : n)
       {
         Node nnf = computeNnf(nm, nn, pol);
         if (nnf.isNull())
@@ -107,7 +107,7 @@ Node computeNnf(NodeManager* nm, Node n, bool pol)
     {
       if (!n[0].getType().isBoolean())
       {
-        return pol ? n : n.negate();
+        return pol ? Node(n) : n.negate();
       }
 
       Node aPos = computeNnf(nm, n[0], true);
@@ -201,21 +201,21 @@ Node computeNnf(NodeManager* nm, Node n, bool pol)
     {
       if (isLiteral(n))
       {
-        return pol ? n : n.negate();
+        return pol ? Node(n) : n.negate();
       }
       return Node::null();
     }
   }
 }
 
-Node skolemize(NodeManager* nm, Node n, std::vector<Node>& freeVars)
+Node skolemize(NodeManager* nm, TNode n, std::vector<Node>& freeVars)
 {
   switch (n.getKind())
   {
     case Kind::FORALL:
     {
       std::vector<Node> newFreevars = freeVars;
-      for (const Node& v : n[0])
+      for (TNode v : n[0])
       {
         newFreevars.push_back(v);
       }
@@ -225,14 +225,14 @@ Node skolemize(NodeManager* nm, Node n, std::vector<Node>& freeVars)
     case Kind::EXISTS:
     {
       std::vector<TypeNode> argTypes;
-      for (const Node& v : freeVars)
+      for (TNode v : freeVars)
       {
         argTypes.push_back(v.getType());
       }
 
       std::vector<Node> vars;
       std::vector<Node> skolemTerms;
-      for (const Node& v : n[0])
+      for (TNode v : n[0])
       {
         vars.push_back(v);
         if (freeVars.empty())
@@ -258,7 +258,7 @@ Node skolemize(NodeManager* nm, Node n, std::vector<Node>& freeVars)
     case Kind::OR:
     {
       std::vector<Node> children;
-      for (const Node& child : n)
+      for (TNode child : n)
       {
         children.push_back(skolemize(nm, child, freeVars));
       }
@@ -271,13 +271,13 @@ Node skolemize(NodeManager* nm, Node n, std::vector<Node>& freeVars)
   }
 }
 
-Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
+Node computePrenex(NodeManager* nm, TNode n, std::vector<Node>& vars)
 {
   switch (n.getKind())
   {
     case Kind::FORALL:
     {
-      for (const Node& v : n[0])
+      for (TNode v : n[0])
       {
         vars.push_back(v);
       }
@@ -287,7 +287,7 @@ Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
     case Kind::OR:
     {
       std::vector<Node> children;
-      for (const Node& child : n)
+      for (TNode child : n)
       {
         Node newChild = computePrenex(nm, child, vars);
         if (newChild.isNull())
@@ -306,14 +306,14 @@ Node computePrenex(NodeManager* nm, Node n, std::vector<Node>& vars)
   }
 }
 
-std::vector<std::vector<Node>> toCnf(Node n)
+std::vector<std::vector<Node>> toCnf(TNode n)
 {
   switch (n.getKind())
   {
     case Kind::AND:
     {
       std::vector<std::vector<Node>> result;
-      for (const Node& child : n)
+      for (TNode child : n)
       {
         std::vector<std::vector<Node>> childCnf = toCnf(child);
         result.insert(result.end(), childCnf.begin(), childCnf.end());
@@ -354,7 +354,7 @@ std::vector<std::vector<Node>> toCnf(Node n)
   }
 }
 
-bool computeQuantCnf(Node q,
+bool computeQuantCnf(TNode q,
                      std::vector<Node>& vars,
                      std::vector<std::vector<Node>>& clauses)
 {
@@ -386,7 +386,7 @@ bool computeQuantCnf(Node q,
   return true;
 }
 
-bool isSupportedTriggerTerm(Node n)
+bool isSupportedTriggerTerm(TNode n)
 {
   if (n.getKind() != Kind::APPLY_UF)
   {
@@ -443,15 +443,15 @@ CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
   }
 
   // Compute `apps` and `reps`
-  for (const Node& rep : allReps)
+  for (TNode rep : allReps)
   {
     eq::EqClassIterator eqc_i(rep, ee);
     while (!eqc_i.isFinished())
     {
-      Node term = *eqc_i;
+      TNode term = *eqc_i;
       if (term.getKind() == Kind::APPLY_UF)
       {
-        Node f = term.getOperator();
+        TNode f = term.getOperator();
 
         // Compute `apps`
         apps[{f, rep}].push_back(term);
@@ -469,7 +469,7 @@ CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
 
 const std::vector<Node> CcfvIndices::s_empty = {};
 
-const std::vector<Node>& CcfvIndices::getDiseqs(Node t) const
+const std::vector<Node>& CcfvIndices::getDiseqs(TNode t) const
 {
   Node rep;
   if (d_ee->hasTerm(t))
@@ -480,13 +480,13 @@ const std::vector<Node>& CcfvIndices::getDiseqs(Node t) const
   return (it != diseqs.end()) ? it->second : s_empty;
 }
 
-const std::vector<Node>& CcfvIndices::getReps(Node f) const
+const std::vector<Node>& CcfvIndices::getReps(TNode f) const
 {
   auto it = reps.find(f);
   return (it != reps.end()) ? it->second : s_empty;
 }
 
-const std::vector<Node>& CcfvIndices::getApps(Node f, Node t) const
+const std::vector<Node>& CcfvIndices::getApps(TNode f, TNode t) const
 {
   Node rep;
   if (d_ee->hasTerm(t))
@@ -496,6 +496,223 @@ const std::vector<Node>& CcfvIndices::getApps(Node f, Node t) const
   auto it = apps.find({f, rep});
   return (it != apps.end()) ? it->second : s_empty;
 }
+
+FloatersUnionFind::FloatersUnionFind(const std::vector<Node>& xs)
+{
+  for (TNode x : xs)
+  {
+    d_representative[x] = x;
+  }
+}
+
+Node FloatersUnionFind::find(TNode x)
+{
+  auto it = d_representative.find(x);
+  if (it == d_representative.end())
+  {
+    d_representative[x] = x;
+    return x;
+  }
+
+  std::vector<TNode> S = {};
+  Node curr = x;
+  while (d_representative[curr] != curr)
+  {
+    S.push_back(curr);
+    curr = d_representative[curr];
+  }
+  for (TNode y : S)
+  {
+    d_representative[y] = curr;
+  }
+  return curr;
+}
+
+void FloatersUnionFind::merge(TNode x,
+                              TNode y,
+                              std::vector<std::pair<Node, Node>>& toMerge)
+{
+  Node repX = find(x);
+  Node repY = find(y);
+  if (repX == repY)
+  {
+    return;
+  }
+
+  for (size_t i = 0; i < 2; ++i)
+  {
+    auto itX = d_child[i].find(repX);
+    auto itY = d_child[i].find(repY);
+    if (itY != d_child[i].end())
+    {
+      if (itX != d_child[i].end())
+      {
+        toMerge.push_back({itX->second, itY->second});
+      }
+    }
+    else if (itX != d_child[i].end())
+    {
+      d_child[i][repY] = itX->second;
+    }
+  }
+
+  d_representative[repX] = repY;
+}
+
+bool FloatersUnionFind::areEquivalent(TNode x, TNode y)
+{
+  return find(x) == find(y);
+}
+
+Node FloatersUnionFind::getChild(TNode rep, size_t index) const
+{
+  Assert(index < 2) << "Index must be 0 (left child) or 1 (right child)";
+  auto it = d_child[index].find(rep);
+  if (it == d_child[index].end())
+  {
+    return Node::null();
+  }
+  return it->second;
+}
+
+bool FloatersUnionFind::hasChildren(TNode rep) const
+{
+  return d_child[0].find(rep) != d_child[0].end()
+         || d_child[1].find(rep) != d_child[1].end();
+}
+
+void FloatersUnionFind::debugPrint(std::ostream& out)
+{
+  std::map<Node, std::vector<Node>> eqClasses;
+  for (const auto& [node, _] : d_representative)
+  {
+    Node root = find(node);
+    eqClasses[root].push_back(node);
+  }
+
+  out << "================= Floater Equivalences (<~>) ================="
+      << std::endl;
+  if (eqClasses.empty())
+  {
+    out << "  (No class registered)" << std::endl;
+  }
+
+  for (const auto& [root, members] : eqClasses)
+  {
+    out << "  Class [" << root << "]: { ";
+    for (size_t i = 0; i < members.size(); ++i)
+    {
+      out << members[i] << (i + 1 < members.size() ? ", " : " ");
+    }
+    out << "}" << std::endl;
+
+    Node c0 = getChild(root, 0);
+    Node c1 = getChild(root, 1);
+    if (!c0.isNull() || !c1.isNull())
+    {
+      out << "    Children: " << (c0.isNull() ? "?" : c0.toString()) << " @ "
+          << (c1.isNull() ? "?" : c1.toString()) << std::endl;
+    }
+  }
+  out << "=============================================================="
+      << std::endl;
+}
+
+void FloatersUnionFind::setChild(TNode rep, size_t index, TNode x)
+{
+  Assert(index < 2) << "Index must be 0 or 1";
+  d_child[index][rep] = x;
+}
+
+HoccfvUtils::HoccfvUtils(const std::vector<Node>& freeVars,
+                         const std::vector<Node>& lits)
+    : d_dsu(std::make_unique<FloatersUnionFind>(freeVars)),
+      d_freeVars(freeVars),
+      d_lits(lits)
+{
+}
+
+void HoccfvUtils::computeFloaterEquivalences()
+{
+  std::vector<std::pair<Node, Node>> toMerge = {};
+
+  for (TNode lit : d_lits)
+  {
+    if (lit.getKind() == Kind::NOT)
+    {
+      continue;
+    }
+    TNode l = lit[0], r = lit[1];
+    if (l.getKind() == Kind::HO_APPLY && r.getKind() == Kind::HO_APPLY)
+    {
+      continue;
+    }
+
+    TNode u0 = (l.getKind() == Kind::BOUND_VARIABLE) ? l : r;
+    TNode u = (l.getKind() == Kind::BOUND_VARIABLE) ? r : l;
+
+    if (u0.getKind() != Kind::BOUND_VARIABLE || u.getKind() != Kind::HO_APPLY)
+    {
+      continue;
+    }
+
+    Node rep0 = d_dsu->find(u0);
+    for (size_t i = 0; i < 2; ++i)
+    {
+      auto existingChild = d_dsu->getChild(rep0, i);
+      if (!existingChild.isNull())
+      {
+        if (existingChild != u[i])
+        {
+          toMerge.push_back({u[i], existingChild});
+        }
+      }
+      else
+      {
+        d_dsu->setChild(rep0, i, u[i]);
+      }
+    }
+  }
+
+  while (!toMerge.empty())
+  {
+    std::pair<Node, Node> curr = toMerge.back();
+    toMerge.pop_back();
+    d_dsu->merge(curr.first, curr.second, toMerge);
+  }
+
+  debugPrintFloaterEquivalences();
+}
+
+void HoccfvUtils::applyGroundOrTypeConstraints()
+{
+  for (const Node& var : d_freeVars)
+  {
+    d_floatable[var] = true;
+  }
+
+  for (const Node& lit : d_lits)
+  {
+    if (lit.getKind() == Kind::NOT)
+    {
+      continue;
+    }
+
+    Node l = lit[0], r = lit[1];
+    if (l.getKind() == Kind::HO_APPLY && r.getKind() == Kind::HO_APPLY)
+    {
+      continue;
+    }
+
+    Node u0 = (l.getKind() == Kind::BOUND_VARIABLE) ? l : r;
+    Node app = (l.getKind() == Kind::BOUND_VARIABLE) ? r : l, u1 = app[0],
+         u2 = app[1];
+
+    // do stuff
+  }
+}
+
+void HoccfvUtils::computeFloaterDependencyGraph() {}
 
 }  // namespace ccfv
 }  // namespace quantifiers

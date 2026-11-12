@@ -14,12 +14,10 @@
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 
-#include <unordered_map>
 #include <vector>
 
 #include "expr/node.h"
 #include "options/quantifiers_options.h"
-#include "prop/sat_solver_types.h"
 #include "smt/env_obj.h"
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 
@@ -89,8 +87,8 @@ class CcfvSolver : protected EnvObj
   std::vector<Node> preprocess(const std::vector<Node>& lits,
                                eq::EqualityEngine* ee);
 
-  Node getNodePVar(TNode x, TNode rep);
-  Node getNodeQVar(TNode x);
+  Node getPVar(TNode x, TNode rep);
+  Node getQVar(TNode x);
   std::map<std::pair<Node, Node>, Node> d_pNodes;
   std::map<Node, Node> d_qNodes;
 
