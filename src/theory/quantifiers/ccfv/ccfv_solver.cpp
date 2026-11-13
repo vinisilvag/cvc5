@@ -531,7 +531,7 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
         TypeNode tn = freeVars[i].getType();
         Node groundTerm;
 
-        // Math the free variable with a ground term of the same type that is a
+        // Match the free variable with a ground term of the same type that is a
         // representative of some equivalence class
         for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
         {
@@ -632,20 +632,10 @@ bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
           return false;
         }
 
-        if (u0.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u0))
-        {
-          return false;
-        }
-        if (u1.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u1))
-        {
-          return false;
-        }
-        if (u2.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u2))
-        {
-          return false;
-        }
-
-        if (!expr::hasFreeVar(u1) && !expr::hasFreeVar(u2))
+        if ((u0.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u0))
+            || (u1.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u1))
+            || (u2.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u2))
+            || (!expr::hasFreeVar(u1) && !expr::hasFreeVar(u2)))
         {
           return false;
         }
@@ -661,17 +651,10 @@ bool CcfvSolver::isPreprocessed(const std::vector<Node>& lits)
 
         TNode x = eq[0][0], y = eq[0][1];
 
-        if (x.getKind() == Kind::BOUND_VARIABLE
-            && y.getKind() == Kind::BOUND_VARIABLE)
-        {
-          continue;
-        }
-
-        if (x.getKind() == Kind::BOUND_VARIABLE && !expr::hasFreeVar(y))
-        {
-          continue;
-        }
-        if (y.getKind() == Kind::BOUND_VARIABLE && !expr::hasFreeVar(x))
+        if ((x.getKind() == Kind::BOUND_VARIABLE
+             && y.getKind() == Kind::BOUND_VARIABLE)
+            || (x.getKind() == Kind::BOUND_VARIABLE && !expr::hasFreeVar(y))
+            || (y.getKind() == Kind::BOUND_VARIABLE && !expr::hasFreeVar(x)))
         {
           continue;
         }
@@ -1254,6 +1237,121 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
       }
     }
     Trace("ccfv") << "=================" << std::endl << std::endl;
+
+    // Reconstructing the substitution
+    std::vector<Node> sub(freeVars.begin(), freeVars.end());
+
+    for (const auto& [key, pNode] : d_pNodes)
+    {
+      if (cnfStream.hasLiteral(pNode))
+      {
+        prop::SatLiteral lit = cnfStream.getLiteral(pNode);
+        if (satSolver->modelValue(lit) == prop::SAT_VALUE_TRUE)
+        {
+          auto it = std::find(freeVars.begin(), freeVars.end(), key.first);
+          if (it != freeVars.end())
+          {
+            size_t idx = std::distance(freeVars.begin(), it);
+            sub[idx] = key.second;
+          }
+        }
+      }
+    }
+
+    auto resolveTerm = [&](TNode t) -> Node {
+      auto it = std::find(freeVars.begin(), freeVars.end(), t);
+      if (it != freeVars.end())
+      {
+        return sub[std::distance(freeVars.begin(), it)];
+      }
+      return Node(t);
+    };
+
+    for (size_t i = 0; i < freeVars.size(); ++i)
+    {
+      if (sub[i] != freeVars[i])
+      {
+        continue;
+      }
+
+      Node rep = hoccfvUtils.getDsu()->find(freeVars[i]);
+      if (freeVars[i] != rep)
+      {
+        sub[i] = resolveTerm(rep);
+      }
+      else
+      {
+        Node g0 = hoccfvUtils.getGround(rep, 0);
+        Node c0 = hoccfvUtils.getDsu()->getChild(rep, 0);
+        Node t1 =
+            !g0.isNull() ? g0 : (!c0.isNull() ? resolveTerm(c0) : Node::null());
+
+        Node g1 = hoccfvUtils.getGround(rep, 1);
+        Node c1 = hoccfvUtils.getDsu()->getChild(rep, 1);
+        Node t2 =
+            !g1.isNull() ? g1 : (!c1.isNull() ? resolveTerm(c1) : Node::null());
+
+        if (!t1.isNull() && !t2.isNull())
+        {
+          sub[i] = nm->mkNode(Kind::HO_APPLY, t1, t2);
+        }
+      }
+    }
+
+    std::map<TypeNode, Node> defaultTermForType;
+    for (size_t i = 0; i < freeVars.size(); ++i)
+    {
+      if (sub[i] == freeVars[i])
+      {
+        TypeNode tn = freeVars[i].getType();
+        auto it = defaultTermForType.find(tn);
+        if (it != defaultTermForType.end())
+        {
+          sub[i] = it->second;
+        }
+        else
+        {
+          Node groundTerm;
+          for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+          {
+            if ((*eqcs_i).getType() == tn)
+            {
+              groundTerm = *eqcs_i;
+              break;
+            }
+          }
+          if (groundTerm.isNull())
+          {
+            groundTerm = nm->mkGroundTerm(tn);
+          }
+
+          defaultTermForType[tn] = groundTerm;
+          sub[i] = groundTerm;
+        }
+      }
+    }
+
+    // Normalizing substitution
+    bool changed = true;
+    while (changed)
+    {
+      changed = false;
+      for (size_t j = 0; j < freeVars.size(); ++j)
+      {
+        if (expr::hasFreeVar(sub[j]))
+        {
+          Node newSub = sub[j].substitute(
+              freeVars.begin(), freeVars.end(), sub.begin(), sub.end());
+          if (newSub != sub[j])
+          {
+            sub[j] = newSub;
+            changed = true;
+          }
+        }
+      }
+    }
+
+    substitutions.push_back(sub);
     return true;
   }
 

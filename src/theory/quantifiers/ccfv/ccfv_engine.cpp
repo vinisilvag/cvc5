@@ -149,11 +149,6 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
           Trace("ccfv-debug") << "  Applying instantiation terms: " << freeVars
                               << " mapsto " << sub << std::endl;
 
-          std::cout << "[***] DEBUGGGGG " << std::endl;
-          std::cout << "  " << q[0] << std::endl;
-          std::cout << "  " << sub << std::endl;
-
-          // TODO: fix this later
           // Workaround to avoid different free variables count after prenexing
           std::vector<Node> origSub(sub.begin(),
                                     sub.begin() + q[0].getNumChildren());
