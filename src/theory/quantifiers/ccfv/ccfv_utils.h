@@ -193,7 +193,6 @@ class FloatersUnionFind
 
   Node getChild(TNode rep, size_t index) const;
   void setChild(TNode rep, size_t index, TNode x);
-  bool hasChildren(TNode rep) const;
 
   void debugPrint(std::ostream& out = std::cout);
 
@@ -231,9 +230,11 @@ class HoccfvUtils
   }
   void debugPrintGroundOrTypeConstraints(std::ostream& out = std::cout);
 
+  Node getGround(TNode rep, size_t index) const;
+  void setGround(TNode rep, size_t index, TNode x);
+
  private:
   std::unique_ptr<FloatersUnionFind> d_dsu;
-
   std::vector<Node> d_freeVars;
   std::vector<Node> d_lits;
   std::map<Node, bool> d_floatable;

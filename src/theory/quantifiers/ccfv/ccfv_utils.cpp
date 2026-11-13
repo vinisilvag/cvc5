@@ -575,12 +575,6 @@ Node FloatersUnionFind::getChild(TNode rep, size_t index) const
   return it->second;
 }
 
-bool FloatersUnionFind::hasChildren(TNode rep) const
-{
-  return d_child[0].find(rep) != d_child[0].end()
-         || d_child[1].find(rep) != d_child[1].end();
-}
-
 void FloatersUnionFind::debugPrint(std::ostream& out)
 {
   std::map<Node, std::vector<Node>> eqClasses;
@@ -737,7 +731,7 @@ void HoccfvUtils::applyGroundOrTypeConstraints()
         }
         else
         {
-          d_ground[i][x] = repUi;
+          d_ground[i][x] = u[i];
         }
       }
     }
@@ -802,6 +796,23 @@ void HoccfvUtils::debugPrintGroundOrTypeConstraints(std::ostream& out)
       << std::endl;
 }
 
+Node HoccfvUtils::getGround(TNode rep, size_t index) const
+{
+  Assert(index < 2) << "Index must be 0 (left child) or 1 (right child)";
+  auto it = d_ground[index].find(rep);
+  if (it == d_ground[index].end())
+  {
+    return Node::null();
+  }
+  return it->second;
+}
+
+void HoccfvUtils::setGround(TNode rep, size_t index, TNode x)
+{
+  Assert(index < 2) << "Index must be 0 or 1";
+  d_ground[index][rep] = x;
+}
+
 void HoccfvUtils::computeFloaterDependencyGraph()
 {
   std::map<Node, size_t> index;
@@ -810,24 +821,25 @@ void HoccfvUtils::computeFloaterDependencyGraph()
 
   for (TNode var : d_freeVars)
   {
-    if (!d_dsu->getChild(var, 0).isNull())
+    Node root = d_dsu->find(var);
+    for (size_t i = 0; i < 2; ++i)
     {
-      d_dsu->setChild(var, 0, d_dsu->find(d_dsu->getChild(var, 0)));
-    }
-    if (!d_dsu->getChild(var, 1).isNull())
-    {
-      d_dsu->setChild(var, 1, d_dsu->find(d_dsu->getChild(var, 1)));
+      Node c = d_dsu->getChild(root, i);
+      if (!c.isNull())
+      {
+        d_dsu->setChild(root, i, d_dsu->find(c));
+      }
     }
 
-    index[var] = 0;
-    low[var] = 0;
-    onStack[var] = false;
+    index[root] = 0;
+    low[root] = 0;
+    onStack[root] = false;
   }
 
   size_t counter = 1;
   std::vector<Node> S = {};
 
-  auto strongConnect = [&](TNode x) {
+  std::function<void(TNode)> strongConnect = [&](TNode x) {
     index[x] = counter;
     low[x] = counter;
     onStack[x] = true;
@@ -836,23 +848,54 @@ void HoccfvUtils::computeFloaterDependencyGraph()
 
     for (size_t i = 0; i < 2; ++i)
     {
+      Node y = d_dsu->getChild(x, i);
+      if (!y.isNull())
+      {
+        if (index.find(y) != index.end())
+        {
+          if (index[y] == 0)
+          {
+            strongConnect(y);
+            low[x] = std::min(low[x], low[y]);
+          }
+          else if (onStack[y])
+          {
+            low[x] = std::min(low[x], index[y]);
+          }
+        }
+      }
     }
 
     if (low[x] == index[x])
     {
+      bool hasSelfLoop =
+          (d_dsu->getChild(x, 0) == x) || (d_dsu->getChild(x, 1) == x);
+      bool isSccFloatable = isFloatable(x) && !hasSelfLoop;
+
+      Node y = S.back();
+      S.pop_back();
+
+      while (y != x)
+      {
+        isSccFloatable = false;
+        onStack[y] = false;
+        d_floatable[y] = false;
+
+        y = S.back();
+        S.pop_back();
+      }
+
+      onStack[x] = false;
+      d_floatable[x] = isSccFloatable;
     }
   };
 
   for (TNode var : d_freeVars)
   {
-    auto itIndex = index.find(d_dsu->find(var));
-    if (itIndex != index.end())
-
+    Node root = d_dsu->find(var);
+    if (index[root] == 0)
     {
-      if (itIndex->second == 0)
-      {
-        strongConnect(d_dsu->find(var));
-      }
+      strongConnect(root);
     }
   }
 }

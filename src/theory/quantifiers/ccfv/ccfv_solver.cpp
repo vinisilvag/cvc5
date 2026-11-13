@@ -856,14 +856,11 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
       << std::endl;
   hoccfvUtils.applyGroundOrTypeConstraints();
 
-  // // Cycle Detection
-  // Trace("ccfv") << "    CcfvEngine: computing the floater-dependency graph to
-  // "
-  //                  "detect cycle variables"
-  //               << std::endl;
-  // hoccfvUtils.computeFloaterDependencyGraph();
-
-  return false;
+  // Cycle Detection
+  Trace("ccfv") << "    CcfvEngine: computing the floater-dependency graph to "
+                   "detect cycle variables"
+                << std::endl;
+  hoccfvUtils.computeFloaterDependencyGraph();
 
   std::map<Node, std::vector<std::pair<Node, Node>>> signatures =
       computeSignatures(ee);
@@ -907,6 +904,7 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
                             "ccfv_sat");
 
   NodeManager* nm = nodeManager();
+  std::vector<Node> satClauses;
 
   // Get disequal classes
   std::vector<Node> allReps = {};
@@ -975,7 +973,7 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
       }
     }
 
-    cnfStream.convertAndAssert(nm->mkOr(disjuncts), false, false);
+    satClauses.push_back(nm->mkOr(disjuncts));
   }
 
   Trace("ccfv") << "    CcfvEngine: encoding positive constraints" << std::endl;
@@ -994,7 +992,10 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
     {
       // If u0 is a variable, it may be a floater (i.e. assigned outside of
       // E^cc)
-      disjuncts.push_back(getQVar(u0));
+      if (hoccfvUtils.isFloatable(u0))
+      {
+        disjuncts.push_back(getQVar(hoccfvUtils.getDsu()->find(u0)));
+      }
 
       // Otherwise, u0 is mapped to some class [t0] in E^cc of compatible type
       for (TNode rep0 : allReps)
@@ -1007,6 +1008,12 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
           // For each signature [t1][t2] in [[t0]], check if u1 and u2 can match
           for (const auto& [rep1, rep2] : it->second)
           {
+            if (u1.getType() != rep1.getType()
+                || u2.getType() != rep2.getType())
+            {
+              continue;
+            }
+
             // Prune branches where ground terms do not match the signature
             // classes
             if (!expr::hasFreeVar(u1) && ee->getRepresentative(u1) != rep1)
@@ -1014,10 +1021,8 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
             if (!expr::hasFreeVar(u2) && ee->getRepresentative(u2) != rep2)
               continue;
 
-            // Collect active P-predicates for remaining free variables
             std::vector<Node> conjuncts;
-            if (u0.getKind() == Kind::BOUND_VARIABLE)
-              conjuncts.push_back(getPVar(u0, rep0));
+            conjuncts.push_back(getPVar(u0, rep0));
             if (u1.getKind() == Kind::BOUND_VARIABLE)
               conjuncts.push_back(getPVar(u1, rep1));
             if (u2.getKind() == Kind::BOUND_VARIABLE)
@@ -1053,47 +1058,144 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
       }
     }
 
-    cnfStream.convertAndAssert(nm->mkOr(disjuncts), false, false);
+    satClauses.push_back(nm->mkOr(disjuncts));
+  }
+
+  // Floater Injectivity
+  std::vector<Node> V = {};
+  std::map<Node, std::set<Node>> children[2];
+  std::map<Node, std::set<Node>> gRange;
+
+  for (TNode posConstraint : positiveConstraints)
+  {
+    TNode l = posConstraint[0], r = posConstraint[1];
+    TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l;
+    TNode u = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
+
+    if (u0.getKind() == Kind::BOUND_VARIABLE)
+    {
+      Node root = hoccfvUtils.getDsu()->find(u0);
+      V.push_back(root);
+      for (size_t i = 0; i < 2; ++i)
+      {
+        if (u[i].getKind() == Kind::BOUND_VARIABLE)
+        {
+          children[i][root].insert(u[i]);
+        }
+      }
+    }
+  }
+
+  for (TNode x : freeVars)
+  {
+    for (TNode rep : allReps)
+    {
+      auto occurs = d_pNodes.find({x, rep});
+      if (occurs != d_pNodes.end())
+      {
+        gRange[hoccfvUtils.getDsu()->find(x)].insert(rep);
+      }
+    }
+  }
+
+  std::sort(V.begin(), V.end());
+  V.erase(std::unique(V.begin(), V.end()), V.end());
+
+  for (TNode x : V)
+  {
+    if (hoccfvUtils.isFloatable(x))
+    {
+      for (size_t i = 0; i < 2; ++i)
+      {
+        if (!hoccfvUtils.getGround(x, i).isNull())
+        {
+          for (TNode y : children[i][x])
+          {
+            satClauses.push_back(nm->mkNode(
+                Kind::OR,
+                getQVar(x).negate(),
+                getPVar(y,
+                        ee->getRepresentative(hoccfvUtils.getGround(x, i)))));
+          }
+        }
+        else
+        {
+          for (TNode y1 : children[i][x])
+          {
+            for (TNode y2 : children[i][x])
+            {
+              if (y1 < y2)
+              {
+                for (TNode rep : gRange[hoccfvUtils.getDsu()->find(y1)])
+                {
+                  satClauses.push_back(nm->mkNode(
+                      Kind::OR,
+                      getQVar(x).negate(),
+                      nm->mkNode(
+                          Kind::EQUAL, getPVar(y1, rep), getPVar(y2, rep))));
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   // Mutual Exclusion
   Trace("ccfv") << "    CcfvEngine: encoding mutual exclusion constraints"
                 << std::endl;
-  for (const Node& var : freeVars)
+  for (TNode var : freeVars)
   {
     std::vector<Node> pVars = {};
-    for (const Node& rep : allReps)
+    for (TNode rep : allReps)
     {
-      auto valid = d_pNodes.find({var, rep});
-      if (valid != d_pNodes.end())
+      auto occurs = d_pNodes.find({var, rep});
+      if (occurs != d_pNodes.end())
       {
-        pVars.push_back(valid->second);
+        pVars.push_back(occurs->second);
       }
     }
 
-    auto qIt = d_qNodes.find(var);
-    if (qIt != d_qNodes.end())
+    if (hoccfvUtils.isFloatable(var))
     {
-      pVars.push_back(qIt->second);
+      Node qRep = hoccfvUtils.getDsu()->find(var);
+      auto qIt = d_qNodes.find(qRep);
+      if (qIt != d_qNodes.end())
+      {
+        pVars.push_back(qIt->second);
+      }
     }
 
     for (size_t i = 0; i < pVars.size(); ++i)
     {
       for (size_t j = i + 1; j < pVars.size(); ++j)
       {
-        cnfStream.convertAndAssert(
-            nm->mkNode(Kind::OR, pVars[i].negate(), pVars[j].negate()),
-            false,
-            false);
+        satClauses.push_back(
+            nm->mkNode(Kind::OR, pVars[i].negate(), pVars[j].negate()));
       }
     }
   }
 
-  // Floater Constraints
-  // TODO:
+  Trace("ccfv") << "    CcfvEngine: generated " << satClauses.size()
+                << " SAT clauses" << std::endl;
+  if (TraceIsOn("ccfv"))
+  {
+    Trace("ccfv") << "=== CCFV SAT ENCODING (" << satClauses.size()
+                  << " clauses) ===" << std::endl;
+    for (size_t i = 0; i < satClauses.size(); ++i)
+    {
+      Trace("ccfv") << "  [" << i << "] " << satClauses[i] << std::endl;
+    }
+    Trace("ccfv") << "--- FULL FORMULA (AND) ---" << std::endl;
+    Trace("ccfv") << nm->mkAnd(satClauses) << std::endl;
+    Trace("ccfv") << "=========================" << std::endl;
+  }
 
-  // Cycle-based Constraints
-  // TODO:
+  for (const Node& clause : satClauses)
+  {
+    cnfStream.convertAndAssert(clause, false, false);
+  }
 
   Trace("ccfv") << "    CcfvEngine: invoking SAT solver" << std::endl;
   prop::SatValue result = satSolver->solve();
@@ -1102,8 +1204,56 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
   if (result == prop::SAT_VALUE_TRUE)
   {
     Trace("ccfv") << "    CcfvEngine: SAT solution found" << std::endl;
-    // Extract the result
-    // Populate the substitutions parameter
+
+    Trace("ccfv") << std::endl << "=== (E^cc) ===" << std::endl;
+    for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
+    {
+      Node rep = *eqcs_i;
+      Trace("ccfv") << "  Eqc [" << rep << "] : { ";
+      for (eq::EqClassIterator eqc_i(rep, ee); !eqc_i.isFinished(); ++eqc_i)
+      {
+        Trace("ccfv") << *eqc_i << " ";
+      }
+      Trace("ccfv") << "}" << std::endl;
+      auto sigIt = signatures.find(rep);
+      if (sigIt != signatures.end() && !sigIt->second.empty())
+      {
+        Trace("ccfv") << "    Signatures: ";
+        for (const auto& [rep1, rep2] : sigIt->second)
+        {
+          Trace("ccfv") << "([" << rep1 << "], [" << rep2 << "]) ";
+        }
+        Trace("ccfv") << std::endl;
+      }
+    }
+    Trace("ccfv") << "===============================" << std::endl;
+
+    Trace("ccfv") << std::endl << "=== Model ===" << std::endl;
+    for (const auto& [var, qNode] : d_qNodes)
+    {
+      if (cnfStream.hasLiteral(qNode))
+      {
+        prop::SatLiteral lit = cnfStream.getLiteral(qNode);
+        if (satSolver->modelValue(lit) == prop::SAT_VALUE_TRUE)
+        {
+          Trace("ccfv") << "  " << qNode << " = TRUE  (variable " << var
+                        << " is a FLOATER)" << std::endl;
+        }
+      }
+    }
+    for (const auto& [key, pNode] : d_pNodes)
+    {
+      if (cnfStream.hasLiteral(pNode))
+      {
+        prop::SatLiteral lit = cnfStream.getLiteral(pNode);
+        if (satSolver->modelValue(lit) == prop::SAT_VALUE_TRUE)
+        {
+          Trace("ccfv") << "  " << pNode << " = TRUE  (" << key.first << " -> ["
+                        << key.second << "])" << std::endl;
+        }
+      }
+    }
+    Trace("ccfv") << "=================" << std::endl << std::endl;
     return true;
   }
 
