@@ -16,6 +16,7 @@
 #define CVC5__THEORY__QUANTIFIERS__CCFV_UTILS_H
 
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "expr/node.h"
@@ -169,14 +170,21 @@ class CcfvIndices
   CcfvIndices(eq::EqualityEngine* ee);
   const std::vector<Node>& getDiseqs(TNode t) const;
   const std::vector<Node>& getReps(TNode f) const;
+  const std::vector<Node>& getRepsOfType(TypeNode tn) const;
+  const std::vector<Node>& getApps(TNode f) const;
   const std::vector<Node>& getApps(TNode f, TNode t) const;
+  Node fallbackForType(const TypeNode& tn) const;
 
  private:
   eq::EqualityEngine* d_ee;
-  std::unordered_map<Node, std::vector<Node>> diseqs;
+  std::unordered_map<TypeNode, std::vector<Node>> repsByType;
+  std::unordered_map<Node, std::vector<Node>> allApps;
+  mutable std::unordered_map<Node, std::vector<Node>> diseqs;
+  mutable std::unordered_set<Node> diseqsDone;
   std::unordered_map<std::pair<Node, Node>, std::vector<Node>, NodePairHash>
       apps;
   std::unordered_map<Node, std::vector<Node>> reps;
+  mutable std::unordered_map<TypeNode, Node> fallbackTermCache;
 
   static const std::vector<Node> s_empty;
 };

@@ -15,13 +15,25 @@
 #define CVC5__THEORY__QUANTIFIERS__CCFV_ENGINE_H
 
 #include <memory>
+#include <unordered_map>
+#include <vector>
 
+#include "expr/node.h"
 #include "theory/quantifiers/quant_module.h"
 #include "util/statistics_stats.h"
 
 namespace cvc5::internal {
 namespace theory {
+
+namespace eq {
+class EqualityEngine;
+}
+
 namespace quantifiers {
+
+namespace ccfv {
+class CcfvIndices;
+}
 
 class CcfvSolver;
 
@@ -68,6 +80,8 @@ class CcfvEngine : public QuantifiersModule
   Statistics d_stats;
 
   std::unordered_map<Node, std::vector<std::vector<Node>>> d_quantCnf;
+  std::unordered_map<Node, std::vector<std::vector<Node>>> d_qTriggers;
+  std::unique_ptr<ccfv::CcfvIndices> d_indices;
   std::unordered_map<Node, std::vector<Node>> d_quantVars;
 
   /** CCFV solver instance for solving E-ground (dis)unification */
@@ -81,6 +95,8 @@ class CcfvEngine : public QuantifiersModule
 
   /** Custom Model-based instantiation implementation */
   void checkModelInst(Theory::Effort level);
+
+  const ccfv::CcfvIndices& getIndices(eq::EqualityEngine* ee);
 };
 
 }  // namespace quantifiers

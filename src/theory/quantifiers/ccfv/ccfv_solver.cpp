@@ -83,6 +83,7 @@ bool CcfvSolver::solve(options::CcfvMode mode,
                        const std::vector<Node>& freeVars,
                        const std::vector<Node>& lits,
                        eq::EqualityEngine* ee,
+                       const ccfv::CcfvIndices& indices,
                        std::vector<std::vector<Node>>& substitutions)
 {
   Trace("ccfv-solver") << "CcfvSolver::solve: " << freeVars.size()
@@ -98,7 +99,7 @@ bool CcfvSolver::solve(options::CcfvMode mode,
   {
     Trace("ccfv-solver") << "  Dispatching to: Decision Procedure backend"
                          << std::endl;
-    return solveProcedural(freeVars, lits, ee, substitutions);
+    return solveProcedural(freeVars, lits, ee, indices, substitutions);
   }
   else if (mode == options::CcfvMode::SAT)
   {
@@ -479,14 +480,9 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
       {
         Trace("ccfv") << "    CcfvEngine: DVar (" << l << " != " << r << ")"
                       << std::endl;
-        for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
-        {
-          Node rep = *eqcs_i;
-          if (rep.getType() != l.getType())
-          {
-            continue;
-          }
 
+        for (TNode rep : indices.getRepsOfType(l.getType()))
+        {
           for (const Node& t : indices.getDiseqs(rep))
           {
             Trace("ccfv") << "      CcfvEngine: adding " << l.eqNode(rep)
@@ -514,9 +510,9 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
 bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
                                  const std::vector<Node>& lits,
                                  eq::EqualityEngine* ee,
+                                 const ccfv::CcfvIndices& indices,
                                  std::vector<std::vector<Node>>& substitutions)
 {
-  ccfv::CcfvIndices indices(ee);
   std::vector<Node> currentSubstitution(freeVars.begin(), freeVars.end());
   substitutions =
       solveProceduralRec(freeVars, lits, ee, indices, currentSubstitution);
@@ -528,29 +524,11 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
     {
       if (freeVars[i] == sub[i])
       {
-        TypeNode tn = freeVars[i].getType();
-        Node groundTerm;
-
-        // Match the free variable with a ground term of the same type that is a
-        // representative of some equivalence class
-        for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
-        {
-          if ((*eqcs_i).getType() == tn)
-          {
-            groundTerm = *eqcs_i;
-            break;
-          }
-        }
-
-        // If no such term is found, use the NodeManager API to generate a term
-        // with the same type
-        if (groundTerm.isNull())
-        {
-          groundTerm = NodeManager::mkGroundTerm(tn);
-        }
+        Node groundTerm = indices.fallbackForType(freeVars[i].getType());
 
         Trace("ccfv") << "  CcfvEngine: Grounding remaining free variable "
                       << freeVars[i] << " with " << groundTerm << std::endl;
+
         // Substitute the variable with the ground term
         for (Node& t : sub)
         {

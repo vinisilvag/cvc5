@@ -64,6 +64,7 @@ class CcfvSolver : protected EnvObj
              const std::vector<Node>& freeVars,
              const std::vector<Node>& lits,
              eq::EqualityEngine* ee,
+             const ccfv::CcfvIndices& indices,
              std::vector<std::vector<Node>>& substitutions);
 
  private:
@@ -71,6 +72,7 @@ class CcfvSolver : protected EnvObj
   bool solveProcedural(const std::vector<Node>& freeVars,
                        const std::vector<Node>& lits,
                        eq::EqualityEngine* ee,
+                       const ccfv::CcfvIndices& indices,
                        std::vector<std::vector<Node>>& substitutions);
 
   /** TODO: add comments */

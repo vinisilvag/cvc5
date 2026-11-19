@@ -46,6 +46,12 @@ CcfvEngine::CcfvEngine(Env& env,
 
 CcfvEngine::~CcfvEngine() = default;
 
+const ccfv::CcfvIndices& CcfvEngine::getIndices(eq::EqualityEngine* ee)
+{
+  if (!d_indices) d_indices = std::make_unique<ccfv::CcfvIndices>(ee);
+  return *d_indices;
+}
+
 bool CcfvEngine::needsCheck(Theory::Effort level)
 {
   // Run when quantifier-free theories have reached a consistent assignment
@@ -60,6 +66,8 @@ QuantifiersModule::QEffort CcfvEngine::needsModel(
 
 void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
 {
+  d_indices.reset();
+
   Trace("ccfv") << "CcfvEngine::check at level " << level << ", effort "
                 << quant_e << std::endl;
   if (quant_e == QEFFORT_CONFLICT)
@@ -137,8 +145,12 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
       bool solved = false;
       {
         TimerStat::CodeTimer timer(d_stats.d_solveTime);
-        solved = d_solver->solve(
-            options().quantifiers.ccfvMode, freeVars, L, ee, substitutions);
+        solved = d_solver->solve(options().quantifiers.ccfvMode,
+                                 freeVars,
+                                 L,
+                                 ee,
+                                 getIndices(ee),
+                                 substitutions);
       }
       if (solved)
       {
@@ -190,24 +202,6 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
   Trace("ccfv") << "CcfvEngine: " << nquant << " asserted quantifiers in model"
                 << std::endl;
 
-  // Helper to build L based on trigger selection
-  std::unordered_map<Node, std::vector<Node>> apps = {};
-  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
-  {
-    TNode rep = *eqcs_i;
-    eq::EqClassIterator eqc_i(rep, ee);
-    while (!eqc_i.isFinished())
-    {
-      TNode term = *eqc_i;
-      if (term.getKind() == Kind::APPLY_UF)
-      {
-        TNode f = term.getOperator();
-        apps[f].push_back(term);
-      }
-      ++eqc_i;
-    }
-  }
-
   for (size_t i = 0; i < nquant; ++i)
   {
     TNode q = fm->getAssertedQuantifier(i, true);
@@ -220,69 +214,79 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
                         << std::endl;
 
     std::vector<Node> freeVars(q[0].begin(), q[0].end());
-    std::vector<std::vector<Node>> triggers = {};
-    if (q.getNumChildren() == 3)
-    {
-      Trace("ccfv-debug") << "CcfvEngine: User-defined triggers: " << q[2]
-                          << std::endl;
-      for (TNode userPattern : q[2])
-      {
-        if (userPattern.getKind() != Kind::INST_PATTERN)
-        {
-          continue;
-        }
 
-        std::vector<Node> patList = {};
-        for (TNode pattern : userPattern)
+    auto it = d_qTriggers.find(q);
+    if (it == d_qTriggers.end())
+    {
+      std::vector<std::vector<Node>> triggers;
+
+      if (q.getNumChildren() == 3)
+      {
+        Trace("ccfv-debug")
+            << "CcfvEngine: User-defined triggers: " << q[2] << std::endl;
+        for (TNode userPattern : q[2])
         {
-          if (ccfv::isSupportedTriggerTerm(pattern))
+          if (userPattern.getKind() != Kind::INST_PATTERN)
           {
-            patList.push_back(pattern);
+            continue;
+          }
+
+          std::vector<Node> patList = {};
+          for (TNode pattern : userPattern)
+          {
+            if (ccfv::isSupportedTriggerTerm(pattern))
+            {
+              patList.push_back(pattern);
+            }
+          }
+          if (patList.size() == userPattern.getNumChildren())
+          {
+            triggers.push_back(patList);
           }
         }
-        if (patList.size() == userPattern.getNumChildren())
+      }
+
+      if (triggers.empty())
+      {
+        Trace("ccfv-debug")
+            << "CcfvEngine: Automatic trigger selection" << std::endl;
+        std::vector<Node> patterns;
+        std::map<Node, inst::TriggerTermInfo> tinfo;
+        inst::PatternTermSelector pts(
+            q, options().quantifiers.triggerSelMode, {}, true, false, false);
+        pts.collect(d_qreg.getInstConstantBody(q), patterns, tinfo);
+        std::vector<Node> multiTrigger;
+        for (size_t k = 0; k < patterns.size(); ++k)
         {
-          triggers.push_back(patList);
+          size_t freeVarsNum = tinfo[patterns[k]].d_fv.size();
+          Node pattern =
+              d_qreg.substituteInstConstantsToBoundVariables(patterns[k], q);
+
+          if (!ccfv::isSupportedTriggerTerm(pattern))
+          {
+            continue;
+          }
+
+          if (freeVarsNum == freeVars.size())
+          {
+            triggers.push_back({pattern});
+          }
+          else
+          {
+            multiTrigger.push_back(pattern);
+          }
+        }
+
+        if (triggers.empty() && !multiTrigger.empty())
+        {
+          triggers.push_back(multiTrigger);
         }
       }
+
+      it = d_qTriggers.emplace(q, std::move(triggers)).first;
     }
 
-    if (triggers.empty())
-    {
-      Trace("ccfv-debug") << "CcfvEngine: Automatic trigger selection"
-                          << std::endl;
-      std::vector<Node> patterns;
-      std::map<Node, inst::TriggerTermInfo> tinfo;
-      inst::PatternTermSelector pts(
-          q, options().quantifiers.triggerSelMode, {}, true, false, false);
-      pts.collect(d_qreg.getInstConstantBody(q), patterns, tinfo);
-      std::vector<Node> multiTrigger;
-      for (size_t k = 0; k < patterns.size(); ++k)
-      {
-        size_t freeVarsNum = tinfo[patterns[k]].d_fv.size();
-        Node pattern =
-            d_qreg.substituteInstConstantsToBoundVariables(patterns[k], q);
-
-        if (!ccfv::isSupportedTriggerTerm(pattern))
-        {
-          continue;
-        }
-
-        if (freeVarsNum == freeVars.size())
-        {
-          triggers.push_back({pattern});
-        }
-        else
-        {
-          multiTrigger.push_back(pattern);
-        }
-      }
-
-      if (triggers.empty() && !multiTrigger.empty())
-      {
-        triggers.push_back(multiTrigger);
-      }
-    }
+    const auto& triggers = it->second;
 
     if (triggers.empty())
     {
@@ -298,6 +302,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
 
     Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
     int addedLemmas = 0;
+    const ccfv::CcfvIndices& indices = getIndices(ee);
 
     // Generating L candidates
     // Knuth Odometer algorithm (The Art of Computer Programming, volume 4A)
@@ -308,7 +313,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
 
       for (TNode pat : trigger)
       {
-        if (apps[pat.getOperator()].empty())
+        if (indices.getReps(pat.getOperator()).empty())
         {
           canMatch = false;
           break;
@@ -325,7 +330,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
         for (size_t k = 0; k < triggerSize; ++k)
         {
           TNode f = trigger[k].getOperator();
-          TNode t = apps[f][idx[k]];
+          TNode t = indices.getReps(f)[idx[k]];
           L.push_back(trigger[k].eqNode(t));
         }
 
@@ -335,8 +340,12 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
         bool solved = false;
         {
           TimerStat::CodeTimer timer(d_stats.d_solveTime);
-          solved = d_solver->solve(
-              options().quantifiers.ccfvMode, freeVars, L, ee, substitutions);
+          solved = d_solver->solve(options().quantifiers.ccfvMode,
+                                   freeVars,
+                                   L,
+                                   ee,
+                                   indices,
+                                   substitutions);
         }
         if (solved)
         {
@@ -367,7 +376,7 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
         {
           Node fPos = trigger[pos].getOperator();
           idx[pos]++;
-          if (idx[pos] < (int)apps[fPos].size())
+          if (idx[pos] < (int)indices.getReps(fPos).size())
           {
             break;
           }
