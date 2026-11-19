@@ -75,10 +75,14 @@ class CcfvSolver : protected EnvObj
                        const ccfv::CcfvIndices& indices,
                        std::vector<std::vector<Node>>& substitutions);
 
+  size_t selectLiteral(const std::vector<Node>& lits,
+                       eq::EqualityEngine* ee,
+                       const ccfv::CcfvIndices& indices);
+
   /** TODO: add comments */
   std::vector<std::vector<Node>> solveProceduralRec(
       const std::vector<Node>& freeVars,
-      const std::vector<Node> lits,
+      std::vector<Node> lits,
       eq::EqualityEngine* ee,
       const ccfv::CcfvIndices& indices,
       std::vector<Node> currentSubstitution);

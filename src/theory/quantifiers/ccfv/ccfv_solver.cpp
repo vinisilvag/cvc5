@@ -13,6 +13,7 @@
 
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
 
+#include <cstdint>
 #include <cstdlib>
 
 #include "base/exception.h"
@@ -110,9 +111,221 @@ bool CcfvSolver::solve(options::CcfvMode mode,
   return false;
 }
 
+// Idea: pick literals based on how much branching it will generate
+// Level 0: no branching
+// Level 1: branching depending on the size
+// Level 2: desiqualities
+size_t CcfvSolver::selectLiteral(const std::vector<Node>& lits,
+                                 eq::EqualityEngine* ee,
+                                 const ccfv::CcfvIndices& indices)
+{
+  auto classify = [&](TNode lit) -> std::pair<int, size_t> {
+    Node n = lit;
+    NodeManager* nm = d_env.getNodeManager();
+
+    // Normalization for predicates
+    if (n.getKind() == Kind::APPLY_UF)
+    {
+      n = n.eqNode(nm->mkConst(true));
+    }
+    else if (n.getKind() == Kind::NOT && n[0].getKind() == Kind::APPLY_UF)
+    {
+      n = n[0].eqNode(nm->mkConst(false));
+    }
+
+    switch (n.getKind())
+    {
+      case Kind::EQUAL:
+      {
+        TNode l = n[0], r = n[1];
+
+        // Syntactic equality
+        // s = s
+        if (l == r)
+        {
+          return {0, 0};
+        }
+
+        // Ground equality
+        // t1 = t2
+        bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
+        if (lIsGround && rIsGround)
+        {
+          if (ee->hasTerm(l) && ee->hasTerm(r))
+          {
+            return {0, 0};
+          }
+          else if (l.hasOperator() && r.hasOperator()
+                   && l.getOperator() == r.getOperator()
+                   && l.getNumChildren() == r.getNumChildren())
+          {
+            return {0, 0};
+          }
+        }
+
+        // Assignmnet
+        // x = s or s = x
+        if (l.getKind() == Kind::BOUND_VARIABLE
+            || r.getKind() == Kind::BOUND_VARIABLE)
+        {
+          TNode variable = (l.getKind() == Kind::BOUND_VARIABLE ? l : r);
+          TNode term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
+
+          if (!expr::hasSubterm(term, variable))
+          {
+            return {0, 0};
+          }
+          else
+          {
+            if (term.hasOperator())
+            {
+              Node op = term.getOperator();
+              size_t listSize = indices.getReps(op).size();
+              return {listSize == 0 ? 0 : 1, listSize};
+            }
+            else
+            {
+              return {0, 0};
+            }
+          }
+        }
+
+        // E-matching
+        // f(u_n) = t or t = f(u_n)
+        if ((!ee->hasTerm(l) && l.hasOperator() && rIsGround && ee->hasTerm(r))
+            || (!ee->hasTerm(r) && r.hasOperator() && lIsGround
+                && ee->hasTerm(l)))
+        {
+          TNode fTerm = ee->hasTerm(r) ? l : r;
+          TNode t = ee->hasTerm(r) ? r : l;
+          TNode op = fTerm.getOperator();
+          size_t listSize = indices.getApps(op, t).size();
+          return {listSize == 0 ? 0 : 1, listSize};
+        }
+
+        // E-matching
+        // f(u_n) = g(u'_n) or g(u'_n) = f(u_n)
+        if (l.hasOperator() && r.hasOperator())
+        {
+          size_t listSize = indices.getReps(l.getOperator()).size();
+          if (l.getOperator() == r.getOperator())
+          {
+            return {1, listSize + 1};
+          }
+          return {listSize == 0 ? 0 : 1, listSize};
+        }
+
+        return {0, 0};
+      }
+      case Kind::NOT:
+      {
+        if (n[0].getKind() != Kind::EQUAL) return {0, 0};
+        Node eq = n[0];
+        Node l = eq[0], r = eq[1];
+
+        // lit != lit
+        if (l == r)
+        {
+          return {0, 0};
+        }
+
+        // Ground disequality
+        // t1 != t2
+        bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
+        if (lIsGround && rIsGround)
+        {
+          if (ee->hasTerm(l) && ee->hasTerm(r))
+          {
+            return {0, 0};
+          }
+        }
+
+        // An empty candidate list makes the branch fail immediately, so such
+        // literals get level 0 (they should be processed first)
+
+        // Assignment into a disequal term
+        // x != t or t != x
+        if ((l.getKind() == Kind::BOUND_VARIABLE && rIsGround && ee->hasTerm(r))
+            || (r.getKind() == Kind::BOUND_VARIABLE && lIsGround
+                && ee->hasTerm(l)))
+        {
+          TNode term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
+          size_t listSize = indices.getDiseqs(term).size();
+          return {listSize == 0 ? 0 : 2, listSize};
+        }
+
+        // E-matching
+        // f(u_n) != t or t != f(u_n)
+        if ((!ee->hasTerm(l) && l.hasOperator() && rIsGround && ee->hasTerm(r))
+            || (!ee->hasTerm(r) && r.hasOperator() && lIsGround
+                && ee->hasTerm(l)))
+        {
+          TNode t = ee->hasTerm(r) ? r : l;
+          size_t listSize = indices.getDiseqs(t).size();
+          return {listSize == 0 ? 0 : 2, listSize};
+        }
+
+        // DFapp
+        // x != f(u_n) or f(u_n) != x
+        if ((l.getKind() == Kind::BOUND_VARIABLE && r.hasOperator())
+            || (l.hasOperator() && r.getKind() == Kind::BOUND_VARIABLE))
+        {
+          TNode term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
+          size_t listSize = indices.getReps(term.getOperator()).size();
+          return {listSize == 0 ? 0 : 2, listSize};
+        }
+
+        // E-matching
+        // f(u_n) != g(u'_n) or g(u'_n) != f(u_n)
+        if (l.hasOperator() && r.hasOperator())
+        {
+          size_t listSize = indices.getReps(l.getOperator()).size();
+          return {listSize == 0 ? 0 : 2, listSize};
+        }
+
+        // DVar
+        // x != y
+        if (l.getKind() == Kind::BOUND_VARIABLE
+            && r.getKind() == Kind::BOUND_VARIABLE)
+        {
+          size_t lSize = indices.getRepsOfType(l.getType()).size();
+          size_t rSize = indices.getRepsOfType(r.getType()).size();
+          size_t listSize = lSize > rSize ? lSize : rSize;
+          return {listSize == 0 ? 0 : 2, listSize};
+        }
+
+        return {0, 0};
+      }
+      default: return {0, 0};
+    }
+  };
+
+  size_t best = lits.size() - 1;
+  int bestLevel = 3;
+  size_t bestCost = SIZE_MAX;
+
+  for (size_t i = lits.size(); i > 0; --i)
+  {
+    auto [level, cost] = classify(lits[i - 1]);
+
+    if (level == 0)
+    {
+      return i - 1;
+    }
+    if (level < bestLevel || (level == bestLevel && cost < bestCost))
+    {
+      best = i - 1;
+      bestLevel = level;
+      bestCost = cost;
+    }
+  }
+
+  return best;
+}
+
 std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
     const std::vector<Node>& freeVars,
-    const std::vector<Node> lits,
+    std::vector<Node> lits,
     eq::EqualityEngine* ee,
     const ccfv::CcfvIndices& indices,
     std::vector<Node> currentSubstitution)
@@ -122,10 +335,13 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
     return {currentSubstitution};
   }
 
-  // TODO: apply more sophisticated selection later
-  // Currently its just a stack
+  // Smart literal selection
+  size_t pick = selectLiteral(lits, ee, indices);
+  std::swap(lits[pick], lits.back());
   Node c = lits.back();
-  std::vector<Node> newLits(lits.begin(), lits.end() - 1);
+  lits.pop_back();
+  std::vector<Node>& newLits = lits;
+
   std::vector<std::vector<Node>> sols;
 
   Trace("ccfv") << "  CcfvEngine: L " << lits << std::endl;
@@ -783,9 +999,10 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
 
   // TODO: By default, cvc5 canonizes fully applied higher-order applications
   // (HO_APPLY) into standard first-order applications (APPLY_UF). To simplify
-  // subsequent checks and keep the encoding purely binary/curried, we normalize
-  // all literals in L using `toHoApply`. Once the full preprocessing pipeline
-  // is implemented, this normalization may become redundant and can be removed.
+  // subsequent checks and keep the encoding purely binary/curried, we
+  // normalize all literals in L using `toHoApply`. Once the full
+  // preprocessing pipeline is implemented, this normalization may become
+  // redundant and can be removed.
   std::vector<Node> hoLits = {};
   for (const Node& lit : lits)
   {
@@ -836,9 +1053,10 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
     }
     else
     {
-      // Since we already guarded the format of literals in L, if lit.getKind()
-      // != Kind::EQUAL then it is, for sure, Kind::NOT and lit[0].getKind() is
-      // Kind::EQUAL
+      // Since we already guarded the format of literals in L, if
+      // lit.getKind()
+      // != Kind::EQUAL then it is, for sure, Kind::NOT and lit[0].getKind()
+      // is Kind::EQUAL
       negativeConstraints.push_back(lit);
     }
   }
@@ -919,9 +1137,9 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
     else
     {
       // If both terms are variables (x != y), they must be assigned to two
-      // distinct congruence classes [t1] and [t2] known to be disequal in E^cc
-      // (E |= t1 != t2). We add a disjunct (P_{x, [t1]} /\ P_{y, [t2]}) for
-      // every compatible disequal pair of representatives
+      // distinct congruence classes [t1] and [t2] known to be disequal in
+      // E^cc (E |= t1 != t2). We add a disjunct (P_{x, [t1]} /\ P_{y, [t2]})
+      // for every compatible disequal pair of representatives
       for (auto [rep1, rep2] : diseqClasses)
       {
         if (rep1.getType() == x.getType() && rep2.getType() == u.getType())
@@ -966,7 +1184,8 @@ bool CcfvSolver::solveSat(const std::vector<Node>& freeVars,
           auto it = signatures.find(rep0);
           if (it == signatures.end()) continue;
 
-          // For each signature [t1][t2] in [[t0]], check if u1 and u2 can match
+          // For each signature [t1][t2] in [[t0]], check if u1 and u2 can
+          // match
           for (const auto& [rep1, rep2] : it->second)
           {
             if (u1.getType() != rep1.getType()
