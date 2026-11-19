@@ -14,6 +14,7 @@
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 
+#include <unordered_map>
 #include <vector>
 
 #include "expr/node.h"
@@ -86,6 +87,13 @@ class CcfvSolver : protected EnvObj
       eq::EqualityEngine* ee,
       const ccfv::CcfvIndices& indices,
       std::vector<Node> currentSubstitution);
+
+  /**
+   * Rewrites predicate literals P(t) and (not P(t)) as equalities
+   * P(t) = true and P(t) = false, so that the procedural solver only sees
+   * (dis)equalities.
+   */
+  Node normalizePredicate(TNode lit);
 
   /** Encoded CCFV */
   bool isPreprocessed(const std::vector<Node>& lits);

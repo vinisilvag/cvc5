@@ -111,6 +111,19 @@ bool CcfvSolver::solve(options::CcfvMode mode,
   return false;
 }
 
+Node CcfvSolver::normalizePredicate(TNode lit)
+{
+  if (lit.getKind() == Kind::APPLY_UF)
+  {
+    return lit.eqNode(nodeManager()->mkConst(true));
+  }
+  if (lit.getKind() == Kind::NOT && lit[0].getKind() == Kind::APPLY_UF)
+  {
+    return lit[0].eqNode(nodeManager()->mkConst(false));
+  }
+  return lit;
+}
+
 // Idea: pick literals based on how much branching it will generate
 // Level 0: no branching
 // Level 1: branching depending on the size
@@ -120,24 +133,11 @@ size_t CcfvSolver::selectLiteral(const std::vector<Node>& lits,
                                  const ccfv::CcfvIndices& indices)
 {
   auto classify = [&](TNode lit) -> std::pair<int, size_t> {
-    Node n = lit;
-    NodeManager* nm = d_env.getNodeManager();
-
-    // Normalization for predicates
-    if (n.getKind() == Kind::APPLY_UF)
-    {
-      n = n.eqNode(nm->mkConst(true));
-    }
-    else if (n.getKind() == Kind::NOT && n[0].getKind() == Kind::APPLY_UF)
-    {
-      n = n[0].eqNode(nm->mkConst(false));
-    }
-
-    switch (n.getKind())
+    switch (lit.getKind())
     {
       case Kind::EQUAL:
       {
-        TNode l = n[0], r = n[1];
+        TNode l = lit[0], r = lit[1];
 
         // Syntactic equality
         // s = s
@@ -148,7 +148,7 @@ size_t CcfvSolver::selectLiteral(const std::vector<Node>& lits,
 
         // Ground equality
         // t1 = t2
-        bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
+        bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
         if (lIsGround && rIsGround)
         {
           if (ee->hasTerm(l) && ee->hasTerm(r))
@@ -219,8 +219,8 @@ size_t CcfvSolver::selectLiteral(const std::vector<Node>& lits,
       }
       case Kind::NOT:
       {
-        if (n[0].getKind() != Kind::EQUAL) return {0, 0};
-        Node eq = n[0];
+        if (lit[0].getKind() != Kind::EQUAL) return {0, 0};
+        Node eq = lit[0];
         Node l = eq[0], r = eq[1];
 
         // lit != lit
@@ -231,7 +231,7 @@ size_t CcfvSolver::selectLiteral(const std::vector<Node>& lits,
 
         // Ground disequality
         // t1 != t2
-        bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
+        bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
         if (lIsGround && rIsGround)
         {
           if (ee->hasTerm(l) && ee->hasTerm(r))
@@ -348,17 +348,6 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
   Trace("ccfv") << "  CcfvEngine: Processing " << c << std::endl;
   Trace("ccfv") << "  CcfvEngine: Remaining L " << newLits << std::endl;
 
-  // Handling predicate literals
-  NodeManager* nm = nodeManager();
-  if (c.getKind() == Kind::APPLY_UF)
-  {
-    c = c.eqNode(nm->mkConst(true));
-  }
-  if (c.getKind() == Kind::NOT && c[0].getKind() == Kind::APPLY_UF)
-  {
-    c = c[0].eqNode(nm->mkConst(false));
-  }
-
   switch (c.getKind())
   {
     case Kind::EQUAL:
@@ -378,7 +367,7 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
 
       // Ground equality
       // t1 = t2
-      bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
+      bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
       if (lIsGround && rIsGround)
       {
         Trace("ccfv") << "    CcfvEngine: ground equality (" << l << " = " << r
@@ -564,7 +553,7 @@ std::vector<std::vector<Node>> CcfvSolver::solveProceduralRec(
 
       // Ground disequality
       // t1 != t2
-      bool lIsGround = !expr::hasFreeVar(l), rIsGround = !expr::hasFreeVar(r);
+      bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
       if (lIsGround && rIsGround)
       {
         Trace("ccfv") << "    CcfvEngine: ground disequality (" << l
@@ -729,9 +718,18 @@ bool CcfvSolver::solveProcedural(const std::vector<Node>& freeVars,
                                  const ccfv::CcfvIndices& indices,
                                  std::vector<std::vector<Node>>& substitutions)
 {
+  // Predicate literals are rewritten once, so the recursion only deals with
+  // (dis)equalities
+  std::vector<Node> normalizedLits;
+  normalizedLits.reserve(lits.size());
+  for (const Node& lit : lits)
+  {
+    normalizedLits.push_back(normalizePredicate(lit));
+  }
+
   std::vector<Node> currentSubstitution(freeVars.begin(), freeVars.end());
-  substitutions =
-      solveProceduralRec(freeVars, lits, ee, indices, currentSubstitution);
+  substitutions = solveProceduralRec(
+      freeVars, std::move(normalizedLits), ee, indices, currentSubstitution);
 
   // If any free variable is left
   for (std::vector<Node>& sub : substitutions)

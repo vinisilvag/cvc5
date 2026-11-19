@@ -164,6 +164,12 @@ bool computeQuantCnf(TNode q,
 
 bool isSupportedTriggerTerm(TNode n);
 
+/**
+ * Whether n contains no free (bound) variables. The result is cached as a
+ * node attribute, so it is computed once per node.
+ */
+bool isGround(TNode n);
+
 class CcfvIndices
 {
  public:

@@ -78,11 +78,6 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
   {
     checkTriggerInst(level);
   }
-  else if (quant_e == QEFFORT_MODEL)
-  {
-    return;
-    checkModelInst(level);
-  }
 }
 
 void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
@@ -404,15 +399,6 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
                           << q << std::endl;
     }
   }
-}
-
-void CcfvEngine::checkModelInst(CVC5_UNUSED Theory::Effort level)
-{
-  // Model-based quantifier instantiation via CCFV is not yet implemented
-  WarningOnce()
-      << "CCFV: Model-based quantifier instantiation is not yet implemented."
-      << std::endl;
-  return;
 }
 
 }  // namespace quantifiers

@@ -15,6 +15,7 @@
 
 #include <unordered_set>
 
+#include "expr/attribute.h"
 #include "expr/node_algorithm.h"
 #include "theory/uf/equality_engine.h"
 #include "theory/uf/equality_engine_iterator.h"
@@ -23,6 +24,26 @@ namespace cvc5::internal {
 namespace theory {
 namespace quantifiers {
 namespace ccfv {
+
+namespace {
+struct CcfvGroundTag
+{
+};
+struct CcfvGroundComputedTag
+{
+};
+typedef expr::Attribute<CcfvGroundTag, bool> CcfvGroundAttr;
+typedef expr::Attribute<CcfvGroundComputedTag, bool> CcfvGroundComputedAttr;
+}  // namespace
+bool isGround(TNode n)
+{
+  if (!n.getAttribute(CcfvGroundComputedAttr()))
+  {
+    n.setAttribute(CcfvGroundAttr(), !expr::hasFreeVar(n));
+    n.setAttribute(CcfvGroundComputedAttr(), true);
+  }
+  return n.getAttribute(CcfvGroundAttr());
+}
 
 // TODO: Tseitin transformation? Check with Haniel later
 Node computeNnf(NodeManager* nm, TNode n, bool pol)

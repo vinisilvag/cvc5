@@ -93,9 +93,6 @@ class CcfvEngine : public QuantifiersModule
   /** Custom Trigger-based instantiation implementation */
   void checkTriggerInst(Theory::Effort level);
 
-  /** Custom Model-based instantiation implementation */
-  void checkModelInst(Theory::Effort level);
-
   const ccfv::CcfvIndices& getIndices(eq::EqualityEngine* ee);
 };
 
