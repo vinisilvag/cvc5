@@ -14,7 +14,6 @@
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_UTILS_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_UTILS_H
 
-#include <iostream>
 #include <map>
 #include <memory>
 #include <vector>
@@ -32,12 +31,6 @@ namespace quantifiers {
 namespace ccfv {
 
 bool isSupportedTriggerTerm(TNode n);
-
-/**
- * Whether n contains no free (bound) variables. The result is cached as a
- * node attribute, so it is computed once per node.
- */
-bool isGround(TNode n);
 
 class FloatersUnionFind
 {

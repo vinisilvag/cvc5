@@ -86,14 +86,14 @@ bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits)
         TNode u0, u1, u2;
 
         if (l.getKind() == Kind::HO_APPLY && l.getNumChildren() == 2
-            && expr::hasFreeVar(l))
+            && expr::hasBoundVar(l))
         {
           u0 = r;
           u1 = l[0];
           u2 = l[1];
         }
         else if (r.getKind() == Kind::HO_APPLY && r.getNumChildren() == 2
-                 && expr::hasFreeVar(r))
+                 && expr::hasBoundVar(r))
         {
           u0 = l;
           u1 = r[0];
@@ -104,10 +104,10 @@ bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits)
           return false;
         }
 
-        if ((u0.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u0))
-            || (u1.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u1))
-            || (u2.getKind() != Kind::BOUND_VARIABLE && expr::hasFreeVar(u2))
-            || (!expr::hasFreeVar(u1) && !expr::hasFreeVar(u2)))
+        if ((u0.getKind() != Kind::BOUND_VARIABLE && expr::hasBoundVar(u0))
+            || (u1.getKind() != Kind::BOUND_VARIABLE && expr::hasBoundVar(u1))
+            || (u2.getKind() != Kind::BOUND_VARIABLE && expr::hasBoundVar(u2))
+            || (!expr::hasBoundVar(u1) && !expr::hasBoundVar(u2)))
         {
           return false;
         }
@@ -125,8 +125,8 @@ bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits)
 
         if ((x.getKind() == Kind::BOUND_VARIABLE
              && y.getKind() == Kind::BOUND_VARIABLE)
-            || (x.getKind() == Kind::BOUND_VARIABLE && !expr::hasFreeVar(y))
-            || (y.getKind() == Kind::BOUND_VARIABLE && !expr::hasFreeVar(x)))
+            || (x.getKind() == Kind::BOUND_VARIABLE && !expr::hasBoundVar(y))
+            || (y.getKind() == Kind::BOUND_VARIABLE && !expr::hasBoundVar(x)))
         {
           continue;
         }
@@ -190,7 +190,7 @@ void CcfvSatSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
                                              eq::EqualityEngine* ee)
 {
   auto addIfGround = [ee](TNode t) {
-    if (!expr::hasFreeVar(t) && !ee->hasTerm(t))
+    if (!expr::hasBoundVar(t) && !ee->hasTerm(t))
     {
       Trace("ccfv-debug") << "[sat]     registering ground term " << t
                           << " into EE" << std::endl;
@@ -204,9 +204,10 @@ void CcfvSatSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
     {
       // u0 = u1 u2
       TNode l = lit[0], r = lit[1];
-      TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l;
+      TNode u0 =
+          (l.getKind() == Kind::HO_APPLY && expr::hasBoundVar(l)) ? r : l;
       TNode app =
-          (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
+          (l.getKind() == Kind::HO_APPLY && expr::hasBoundVar(l)) ? l : r;
 
       addIfGround(u0);
       if (app.getKind() == Kind::HO_APPLY)
@@ -397,7 +398,7 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
 
     std::vector<Node> disjuncts = {};
 
-    if (!expr::hasFreeVar(u))
+    if (!expr::hasBoundVar(u))
     {
       // If u is a ground term, then x can only be terms that their
       // representatives are different than the representativa of u. We create
@@ -437,8 +438,8 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
   {
     Trace("ccfv-debug") << "[sat]       eq " << posConstraint << std::endl;
     TNode l = posConstraint[0], r = posConstraint[1];
-    TNode app = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
-    TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l,
+    TNode app = (l.getKind() == Kind::HO_APPLY && expr::hasBoundVar(l)) ? l : r;
+    TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasBoundVar(l)) ? r : l,
           u1 = app[0], u2 = app[1];
 
     std::vector<Node> disjuncts = {};
@@ -472,9 +473,9 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
 
             // Prune branches where ground terms do not match the signature
             // classes
-            if (!expr::hasFreeVar(u1) && ee->getRepresentative(u1) != rep1)
+            if (!expr::hasBoundVar(u1) && ee->getRepresentative(u1) != rep1)
               continue;
-            if (!expr::hasFreeVar(u2) && ee->getRepresentative(u2) != rep2)
+            if (!expr::hasBoundVar(u2) && ee->getRepresentative(u2) != rep2)
               continue;
 
             std::vector<Node> conjuncts;
@@ -499,9 +500,9 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
 
       for (const auto& [rep1, rep2] : it->second)
       {
-        if (!expr::hasFreeVar(u1) && ee->getRepresentative(u1) != rep1)
+        if (!expr::hasBoundVar(u1) && ee->getRepresentative(u1) != rep1)
           continue;
-        if (!expr::hasFreeVar(u2) && ee->getRepresentative(u2) != rep2)
+        if (!expr::hasBoundVar(u2) && ee->getRepresentative(u2) != rep2)
           continue;
 
         std::vector<Node> conjuncts;
@@ -525,8 +526,8 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
   for (TNode posConstraint : positiveConstraints)
   {
     TNode l = posConstraint[0], r = posConstraint[1];
-    TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l;
-    TNode u = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
+    TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasBoundVar(l)) ? r : l;
+    TNode u = (l.getKind() == Kind::HO_APPLY && expr::hasBoundVar(l)) ? l : r;
 
     if (u0.getKind() == Kind::BOUND_VARIABLE)
     {
@@ -811,7 +812,7 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
       changed = false;
       for (size_t j = 0; j < freeVars.size(); ++j)
       {
-        if (expr::hasFreeVar(sub[j]))
+        if (expr::hasBoundVar(sub[j]))
         {
           Node newSub = sub[j].substitute(
               freeVars.begin(), freeVars.end(), sub.begin(), sub.end());

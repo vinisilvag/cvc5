@@ -64,7 +64,8 @@ size_t CcfvBacktrackingSolver::selectLiteral(const std::vector<Node>& lits,
 
         // Ground equality
         // t1 = t2
-        bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
+        bool lIsGround = !expr::hasBoundVar(l),
+             rIsGround = !expr::hasBoundVar(r);
         if (lIsGround && rIsGround)
         {
           if (ee->hasTerm(l) && ee->hasTerm(r))
@@ -147,7 +148,8 @@ size_t CcfvBacktrackingSolver::selectLiteral(const std::vector<Node>& lits,
 
         // Ground disequality
         // t1 != t2
-        bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
+        bool lIsGround = !expr::hasBoundVar(l),
+             rIsGround = !expr::hasBoundVar(r);
         if (lIsGround && rIsGround)
         {
           if (ee->hasTerm(l) && ee->hasTerm(r))
@@ -284,7 +286,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
 
       // Ground equality
       // t1 = t2
-      bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
+      bool lIsGround = !expr::hasBoundVar(l), rIsGround = !expr::hasBoundVar(r);
       if (lIsGround && rIsGround)
       {
         Trace("ccfv-debug") << "[backtracking]     ground equality (" << l
@@ -475,7 +477,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
 
       // Ground disequality
       // t1 != t2
-      bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
+      bool lIsGround = !expr::hasBoundVar(l), rIsGround = !expr::hasBoundVar(r);
       if (lIsGround && rIsGround)
       {
         Trace("ccfv-debug") << "[backtracking]     ground disequality (" << l
