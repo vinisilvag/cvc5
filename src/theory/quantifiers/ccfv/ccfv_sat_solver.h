@@ -1,0 +1,73 @@
+/******************************************************************************
+ * This file is part of the cvc5 project.
+ *
+ * Copyright (c) 2009-2026 by the authors listed in the file AUTHORS
+ * in the top-level source directory and their institutional affiliations.
+ * All rights reserved.  See the file COPYING in the top-level source
+ * directory for licensing information.
+ * ****************************************************************************
+ *
+ * SAT-encoded CCFV solver for E-ground (dis)unification.
+ */
+
+#ifndef CVC5__THEORY__QUANTIFIERS__CCFV_SAT_SOLVER_H
+#define CVC5__THEORY__QUANTIFIERS__CCFV_SAT_SOLVER_H
+
+#include <map>
+#include <utility>
+#include <vector>
+
+#include "expr/node.h"
+#include "smt/env_obj.h"
+
+namespace cvc5::internal {
+namespace theory {
+
+namespace eq {
+class EqualityEngine;
+}
+
+namespace quantifiers {
+
+/**
+ * CCFV solver based on a reduction of E-ground (dis)unification to
+ * propositional SAT.
+ */
+class CcfvSatSolver : protected EnvObj
+{
+ public:
+  CcfvSatSolver(Env& env);
+  ~CcfvSatSolver() = default;
+
+  /**
+   * @param freeVars The free variables in L (the quantified variables).
+   * @param lits The set of equational literals L to satisfy.
+   * @param ee The equality engine representing the ground context E.
+   * @param substitutions Output: solutions, index-by-index with `freeVars`.
+   * @return True if at least one solution was found, false otherwise.
+   */
+  bool solve(const std::vector<Node>& freeVars,
+             const std::vector<Node>& lits,
+             eq::EqualityEngine* ee,
+             std::vector<std::vector<Node>>& substitutions);
+
+ private:
+  bool isPreprocessed(const std::vector<Node>& lits);
+
+  Node getPVar(TNode x, TNode rep);
+  Node getQVar(TNode x);
+  std::map<std::pair<Node, Node>, Node> d_pNodes;
+  std::map<Node, Node> d_qNodes;
+
+  void registerGroundTermsFromL(const std::vector<Node>& lits,
+                                eq::EqualityEngine* ee);
+
+  std::map<Node, std::vector<std::pair<Node, Node>>> computeSignatures(
+      eq::EqualityEngine* ee);
+};
+
+}  // namespace quantifiers
+}  // namespace theory
+}  // namespace cvc5::internal
+
+#endif

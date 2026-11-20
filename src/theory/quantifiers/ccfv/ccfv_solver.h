@@ -14,12 +14,14 @@
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_SOLVER_H
 
-#include <unordered_map>
 #include <vector>
 
 #include "expr/node.h"
 #include "options/quantifiers_options.h"
 #include "smt/env_obj.h"
+#include "theory/quantifiers/ccfv/ccfv_backtracking_solver.h"
+#include "theory/quantifiers/ccfv/ccfv_indices.h"
+#include "theory/quantifiers/ccfv/ccfv_sat_solver.h"
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 
 namespace cvc5::internal {
@@ -69,54 +71,11 @@ class CcfvSolver : protected EnvObj
              std::vector<std::vector<Node>>& substitutions);
 
  private:
-  /** Solves using the decision procedure. */
-  bool solveProcedural(const std::vector<Node>& freeVars,
-                       const std::vector<Node>& lits,
-                       eq::EqualityEngine* ee,
-                       const ccfv::CcfvIndices& indices,
-                       std::vector<std::vector<Node>>& substitutions);
+  /** Backtracking CCFV solver (decision mode). */
+  CcfvBacktrackingSolver d_backtrackingSolver;
 
-  size_t selectLiteral(const std::vector<Node>& lits,
-                       eq::EqualityEngine* ee,
-                       const ccfv::CcfvIndices& indices);
-
-  /** TODO: add comments */
-  std::vector<std::vector<Node>> solveProceduralRec(
-      const std::vector<Node>& freeVars,
-      std::vector<Node> lits,
-      eq::EqualityEngine* ee,
-      const ccfv::CcfvIndices& indices,
-      std::vector<Node> currentSubstitution);
-
-  /**
-   * Rewrites predicate literals P(t) and (not P(t)) as equalities
-   * P(t) = true and P(t) = false, so that the procedural solver only sees
-   * (dis)equalities.
-   */
-  Node normalizePredicate(TNode lit);
-
-  /** Encoded CCFV */
-  bool isPreprocessed(const std::vector<Node>& lits);
-
-  std::vector<Node> preprocess(const std::vector<Node>& lits,
-                               eq::EqualityEngine* ee);
-
-  Node getPVar(TNode x, TNode rep);
-  Node getQVar(TNode x);
-  std::map<std::pair<Node, Node>, Node> d_pNodes;
-  std::map<Node, Node> d_qNodes;
-
-  void registerGroundTermsFromL(const std::vector<Node>& lits,
-                                eq::EqualityEngine* ee);
-
-  std::map<Node, std::vector<std::pair<Node, Node>>> computeSignatures(
-      eq::EqualityEngine* ee);
-
-  /** Solves using the SAT encoding procedure. */
-  bool solveSat(const std::vector<Node>& freeVars,
-                const std::vector<Node>& lits,
-                eq::EqualityEngine* ee,
-                std::vector<std::vector<Node>>& substitutions);
+  /** SAT-encoded CCFV solver (sat mode). */
+  CcfvSatSolver d_satSolver;
 };
 
 }  // namespace quantifiers

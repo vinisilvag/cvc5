@@ -1945,4 +1945,11 @@ name   = "Quantifiers"
   name = "sat"
   help = "Use CCFV via SAT encoding."
 
+[[option]]
+  name       = "ccfvCnfLiteralLimit"
+  category   = "expert"
+  long       = "ccfv-cnf-literal-limit=N"
+  type       = "uint64_t"
+  default    = "1000"
+  help       = "maximum number of literals in the CNF of a quantified formula for CCFV; quantified formulas whose CNF would exceed it are skipped (0 == no limit)"
 

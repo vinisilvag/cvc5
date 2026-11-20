@@ -866,8 +866,16 @@ libcvc5_add_sources(
   theory/quantifiers/ematching/trigger_trie.h
   theory/quantifiers/ematching/var_match_generator.cpp
   theory/quantifiers/ematching/var_match_generator.h
+  theory/quantifiers/ccfv/ccfv_backtracking_solver.cpp
+  theory/quantifiers/ccfv/ccfv_backtracking_solver.h
+  theory/quantifiers/ccfv/ccfv_cnf.cpp
+  theory/quantifiers/ccfv/ccfv_cnf.h
   theory/quantifiers/ccfv/ccfv_engine.cpp
   theory/quantifiers/ccfv/ccfv_engine.h
+  theory/quantifiers/ccfv/ccfv_indices.cpp
+  theory/quantifiers/ccfv/ccfv_indices.h
+  theory/quantifiers/ccfv/ccfv_sat_solver.cpp
+  theory/quantifiers/ccfv/ccfv_sat_solver.h
   theory/quantifiers/ccfv/ccfv_solver.cpp
   theory/quantifiers/ccfv/ccfv_solver.h
   theory/quantifiers/ccfv/ccfv_utils.cpp

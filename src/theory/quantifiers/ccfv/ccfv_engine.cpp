@@ -16,6 +16,8 @@
 #include <memory>
 
 #include "base/output.h"
+#include "theory/quantifiers/ccfv/ccfv_cnf.h"
+#include "theory/quantifiers/ccfv/ccfv_indices.h"
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
 #include "theory/quantifiers/ematching/pattern_term_selector.h"
@@ -108,7 +110,8 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
     {
       std::vector<Node> vars;
       std::vector<std::vector<Node>> clauses;
-      if (!ccfv::computeQuantCnf(q, vars, clauses))
+      if (!ccfv::computeQuantCnf(
+              q, vars, clauses, options().quantifiers.ccfvCnfLiteralLimit))
       {
         d_quantCnf[q] = {};
         continue;

@@ -1,0 +1,30 @@
+(set-logic UF)
+(declare-sort U 0)
+(declare-fun a () U)
+(declare-fun b () U)
+(declare-fun c () U)
+(declare-fun d () U)
+(declare-fun f (U) U)
+(declare-fun g (U) U)
+(declare-fun P (U) Bool)
+(declare-fun Q (U) Bool)
+(declare-fun R (U) Bool)
+(declare-fun S (U) Bool)
+(declare-fun T (U U) Bool)
+
+(assert (= (f a) b))
+(assert (P a))
+(assert (R b))
+(assert (P d))
+(assert (not (T a d)))
+(assert (not (= (g a) c)))
+
+(assert
+  (forall ((x U))
+    (=> (and (P x) (or (Q x) (R (f x))))
+        (or
+          (and (S (g x))
+                (forall ((y U)) (or (T x y) (not (P y)))))
+          (and (= (g x) c) (not (Q (f x))))))))
+
+(check-sat)
