@@ -1953,3 +1953,19 @@ name   = "Quantifiers"
   default    = "1000"
   help       = "maximum number of literals in the CNF of a quantified formula for CCFV; quantified formulas whose CNF would exceed it are skipped (0 == no limit)"
 
+[[option]]
+  name       = "ccfvNoCbqi"
+  category   = "expert"
+  long       = "ccfv-no-cbqi"
+  type       = "bool"
+  default    = "false"
+  help       = "disable conflict-based instantiation (CBQI) in CCFV"
+
+[[option]]
+  name       = "ccfvNoTbqi"
+  category   = "expert"
+  long       = "ccfv-no-tbqi"
+  type       = "bool"
+  default    = "false"
+  help       = "disable trigger-based instantiation (TBQI) in CCFV"
+

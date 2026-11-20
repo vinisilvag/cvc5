@@ -77,14 +77,14 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
   {
     // Same as QuantConflictFind, which only runs at full effort (it does not
     // follow --inst-when, and never runs at last call)
-    if (level == Theory::EFFORT_FULL)
+    if (level == Theory::EFFORT_FULL && !options().quantifiers.ccfvNoCbqi)
     {
       // the whole check is timed, as QuantConflictFind does
       TimerStat::CodeTimer timer(d_stats.d_cbqiTime);
       checkConflictInst(level);
     }
   }
-  else if (quant_e == QEFFORT_STANDARD)
+  else if (quant_e == QEFFORT_STANDARD && !options().quantifiers.ccfvNoTbqi)
   {
     // the whole check is timed, as the instantiation engine does
     TimerStat::CodeTimer timer(d_stats.d_tbqiTime);
