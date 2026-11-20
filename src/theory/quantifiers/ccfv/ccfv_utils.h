@@ -52,8 +52,6 @@ class FloatersUnionFind
   Node getChild(TNode rep, size_t index) const;
   void setChild(TNode rep, size_t index, TNode x);
 
-  void debugPrint(std::ostream& out = std::cout);
-
  private:
   std::map<Node, Node> d_representative;
   std::map<Node, Node> d_child[2];
@@ -78,15 +76,6 @@ class HoccfvUtils
     auto it = d_floatable.find(root);
     return (it != d_floatable.end()) ? it->second : false;
   }
-
-  void debugPrintFloaterEquivalences() const
-  {
-    if (d_dsu)
-    {
-      d_dsu->debugPrint();
-    }
-  }
-  void debugPrintGroundOrTypeConstraints(std::ostream& out = std::cout);
 
   Node getGround(TNode rep, size_t index) const;
   void setGround(TNode rep, size_t index, TNode x);

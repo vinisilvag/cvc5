@@ -878,6 +878,8 @@ libcvc5_add_sources(
   theory/quantifiers/ccfv/ccfv_sat_solver.h
   theory/quantifiers/ccfv/ccfv_solver.cpp
   theory/quantifiers/ccfv/ccfv_solver.h
+  theory/quantifiers/ccfv/ccfv_trigger_generator.cpp
+  theory/quantifiers/ccfv/ccfv_trigger_generator.h
   theory/quantifiers/ccfv/ccfv_utils.cpp
   theory/quantifiers/ccfv/ccfv_utils.h
   theory/quantifiers/entailment_check.cpp

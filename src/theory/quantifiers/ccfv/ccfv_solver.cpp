@@ -24,49 +24,6 @@ namespace cvc5::internal {
 namespace theory {
 namespace quantifiers {
 
-void debugPrintEE(eq::EqualityEngine* ee)
-{
-  std::cout << "\n=================== EQUALITY ENGINE ==================="
-            << std::endl;
-  std::vector<Node> reps;
-  for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
-  {
-    reps.push_back(*eqcs_i);
-  }
-
-  for (size_t i = 0; i < reps.size(); ++i)
-  {
-    Node rep = reps[i];
-    std::cout << "[" << i << "] Rep: " << rep << " : " << rep.getType()
-              << std::endl;
-
-    std::cout << "     Members: [";
-    bool first = true;
-    for (eq::EqClassIterator eqc_i(rep, ee); !eqc_i.isFinished(); ++eqc_i)
-    {
-      if (!first) std::cout << ", ";
-      std::cout << *eqc_i;
-      first = false;
-    }
-    std::cout << "]" << std::endl;
-
-    std::cout << "     Disequal to: [";
-    first = true;
-    for (size_t j = 0; j < reps.size(); ++j)
-    {
-      if (i != j && ee->areDisequal(rep, reps[j], false))
-      {
-        if (!first) std::cout << ", ";
-        std::cout << reps[j];
-        first = false;
-      }
-    }
-    std::cout << "]" << std::endl;
-  }
-  std::cout << "=======================================================\n"
-            << std::endl;
-}
-
 CcfvSolver::CcfvSolver(Env& env)
     : EnvObj(env), d_backtrackingSolver(env), d_satSolver(env)
 {

@@ -20,10 +20,8 @@ namespace theory {
 namespace quantifiers {
 namespace ccfv {
 
-CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
+CcfvIndices::CcfvIndices(eq::EqualityEngine* ee) : d_ee(ee)
 {
-  d_ee = ee;
-
   std::vector<Node> allReps;
   for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
   {
@@ -31,7 +29,7 @@ CcfvIndices::CcfvIndices(eq::EqualityEngine* ee)
     repsByType[(*eqcs_i).getType()].push_back(*eqcs_i);
   }
 
-  // Compute `apps` and `reps`
+  // Compute `allApps`, `apps` and `reps`
   for (TNode rep : allReps)
   {
     eq::EqClassIterator eqc_i(rep, ee);

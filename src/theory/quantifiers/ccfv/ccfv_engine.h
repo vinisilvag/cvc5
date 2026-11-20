@@ -14,11 +14,13 @@
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_ENGINE_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_ENGINE_H
 
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <vector>
 
 #include "expr/node.h"
+#include "theory/quantifiers/ccfv/ccfv_trigger_generator.h"
 #include "theory/quantifiers/quant_module.h"
 #include "util/statistics_stats.h"
 
@@ -63,9 +65,6 @@ class CcfvEngine : public QuantifiersModule
   /** Decides when cvc5 should call this module */
   bool needsCheck(Theory::Effort level) override;
 
-  /** Decides at what effort level this module needs a model to be built */
-  QEffort needsModel(Theory::Effort level) override;
-
   /** Core check function called at each quantifier effort level */
   void check(Theory::Effort level, QEffort quant_e) override;
 
@@ -80,18 +79,47 @@ class CcfvEngine : public QuantifiersModule
   Statistics d_stats;
 
   std::unordered_map<Node, std::vector<std::vector<Node>>> d_quantCnf;
-  std::unordered_map<Node, std::vector<std::vector<Node>>> d_qTriggers;
+  /** The quantified formulas processed in the current trigger check. */
+  std::vector<Node> d_quants;
+  /** The number of trigger checks so far. */
+  uint64_t d_checkCount = 0;
   std::unique_ptr<ccfv::CcfvIndices> d_indices;
   std::unordered_map<Node, std::vector<Node>> d_quantVars;
 
   /** CCFV solver instance for solving E-ground (dis)unification */
   std::unique_ptr<CcfvSolver> d_solver;
 
+  /** Generation of the triggers of each quantified formula. */
+  CcfvTriggerGenerator d_triggerGen;
+
   /** Custom Conflict-based instantiation implementation */
   void checkConflictInst(Theory::Effort level);
 
   /** Custom Trigger-based instantiation implementation */
   void checkTriggerInst(Theory::Effort level);
+
+  /** Same as InstantiationEngine::shouldProcess. */
+  bool shouldProcess(Node q);
+  /**
+   * Same as InstantiationEngine::doInstantiationRound: tries internal effort
+   * levels, stopping at the first one that added a lemma.
+   */
+  void doInstantiationRound(Theory::Effort effort);
+  /**
+   * Same as InstStrategyUserPatterns::process.
+   * @return true if the strategy is unfinished at effort level e.
+   */
+  bool processUserPatterns(Node q, CcfvQuantTriggers& qt, int e);
+  /**
+   * Same as InstStrategyAutoGenTriggers::process.
+   * @return true if the strategy is unfinished at effort level e.
+   */
+  bool processAutoGen(Node q, CcfvQuantTriggers& qt, int e);
+  /**
+   * Adds the instantiations of a trigger, as Trigger::addInstantiations.
+   * @return The number of lemmas added.
+   */
+  uint64_t processTrigger(Node q, const CcfvTriggerEntry& tr);
 
   const ccfv::CcfvIndices& getIndices(eq::EqualityEngine* ee);
 };

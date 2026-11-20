@@ -16,13 +16,17 @@
 #include <memory>
 
 #include "base/output.h"
+#include "expr/skolem_manager.h"
 #include "theory/quantifiers/ccfv/ccfv_cnf.h"
 #include "theory/quantifiers/ccfv/ccfv_indices.h"
 #include "theory/quantifiers/ccfv/ccfv_solver.h"
+#include "theory/quantifiers/ccfv/ccfv_trigger_generator.h"
 #include "theory/quantifiers/ccfv/ccfv_utils.h"
-#include "theory/quantifiers/ematching/pattern_term_selector.h"
 #include "theory/quantifiers/first_order_model.h"
 #include "theory/quantifiers/instantiate.h"
+#include "theory/quantifiers/quantifiers_attributes.h"
+#include "theory/quantifiers/quantifiers_registry.h"
+#include "theory/quantifiers/quantifiers_state.h"
 #include "theory/quantifiers/term_registry.h"
 #include "theory/uf/equality_engine.h"
 
@@ -42,7 +46,8 @@ CcfvEngine::CcfvEngine(Env& env,
                        TermRegistry& tr)
     : QuantifiersModule(env, qs, qim, qr, tr),
       d_stats(statisticsRegistry()),
-      d_solver(std::make_unique<CcfvSolver>(env))
+      d_solver(std::make_unique<CcfvSolver>(env)),
+      d_triggerGen(env, qs, qr)
 {
 }
 
@@ -60,12 +65,6 @@ bool CcfvEngine::needsCheck(Theory::Effort level)
   return d_qstate.getInstWhenNeedsCheck(level);
 }
 
-QuantifiersModule::QEffort CcfvEngine::needsModel(
-    CVC5_UNUSED Theory::Effort level)
-{
-  return QEFFORT_MODEL;
-}
-
 void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
 {
   d_indices.reset();
@@ -74,7 +73,12 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
                 << quant_e << std::endl;
   if (quant_e == QEFFORT_CONFLICT)
   {
-    checkConflictInst(level);
+    // Same as QuantConflictFind, which only runs at full effort (it does not
+    // follow --inst-when, and never runs at last call)
+    if (level == Theory::EFFORT_FULL)
+    {
+      checkConflictInst(level);
+    }
   }
   else if (quant_e == QEFFORT_STANDARD)
   {
@@ -87,6 +91,14 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
   Trace("ccfv") << "CcfvEngine: Starting conflict-based instantiation check"
                 << std::endl;
 
+  if (d_qstate.isConflictingInst())
+  {
+    Trace("ccfv") << "CcfvEngine: Model already conflicted, aborting "
+                     "conflict-based instantiation"
+                  << std::endl;
+    return;
+  }
+
   FirstOrderModel* fm = d_treg.getModel();
   size_t nquant = fm->getNumAssertedQuantifiers();
   Instantiate* qinst = d_qim.getInstantiate();
@@ -98,7 +110,9 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
   for (size_t i = 0; i < nquant; ++i)
   {
     TNode q = fm->getAssertedQuantifier(i, true);
-    if (!fm->isQuantifierActive(q))
+    // Same filter as QuantConflictFind: only quantified formulas owned by
+    // this module (or by no module) that are still active
+    if (!d_qreg.hasOwnership(q, this) || !fm->isQuantifierActive(q))
     {
       continue;
     }
@@ -129,6 +143,9 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
 
     Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
 
+    // Set when a conflicting instance was added or when adding failed, in
+    // which case q is not checked further this round (as QuantConflictFind)
+    bool done = false;
     for (const std::vector<Node>& clause : clauses)
     {
       Trace("ccfv-debug") << "  Instantiating for clause: " << clause
@@ -162,24 +179,186 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
           // Workaround to avoid different free variables count after prenexing
           std::vector<Node> origSub(sub.begin(),
                                     sub.begin() + q[0].getNumChildren());
-          if (qinst->addInstantiation(
+          if (!qinst->addInstantiation(
                   q, origSub, InferenceId::QUANTIFIERS_INST_CBQI_CONFLICT))
           {
-            d_qstate.notifyConflictingInst();
-            fm->markRelevant(q);
-            // Conflict found and added
-            // Exiting the loop after the addition
-            return;
+            // The instance was already added (duplicate): stop with this
+            // quantified formula to avoid exponential behavior
+            done = true;
+            break;
           }
+          // Conflict found and added. Marking q as relevant ensures it is
+          // checked first on the next round
+          fm->markRelevant(q);
+          d_qstate.notifyConflictingInst();
+          done = true;
+          break;
         }
       }
+      if (done)
+      {
+        break;
+      }
+    }
+    if (d_qstate.isConflictingInst() || d_qstate.isInConflict())
+    {
+      return;
     }
     Trace("ccfv-debug") << "  No conflicting instance found for " << q
                         << std::endl;
   }
 }
 
-void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
+bool CcfvEngine::shouldProcess(Node q)
+{
+  if (!d_qreg.hasOwnership(q, this))
+  {
+    return false;
+  }
+  // also ignore internal quantifiers
+  return !d_qreg.getQuantAttributes().isQuantBounded(q);
+}
+
+bool CcfvEngine::processUserPatterns(Node q, CcfvQuantTriggers& qt, int e)
+{
+  if (e == 0)
+  {
+    return true;
+  }
+  options::UserPatMode upm = d_triggerGen.getUserPatMode();
+  int peffort = upm == options::UserPatMode::RESORT ? 2 : 1;
+  if (e < peffort)
+  {
+    return true;
+  }
+  if (e != peffort)
+  {
+    return false;
+  }
+  for (const CcfvTriggerEntry& tr : qt.d_user)
+  {
+    processTrigger(q, tr);
+    if (d_qstate.isInConflict())
+    {
+      break;
+    }
+  }
+  return false;
+}
+
+bool CcfvEngine::processAutoGen(Node q, CcfvQuantTriggers& qt, int e)
+{
+  options::UserPatMode upm = d_triggerGen.getUserPatMode();
+  // we do not auto-generate triggers if the mode is trust or strict
+  if (qt.d_hasUserPatterns
+      && (upm == options::UserPatMode::TRUST
+          || upm == options::UserPatMode::STRICT))
+  {
+    return false;
+  }
+  int peffort = (qt.d_hasUserPatterns && upm != options::UserPatMode::IGNORE
+                 && upm != options::UserPatMode::RESORT)
+                    ? 2
+                    : 1;
+  if (e < peffort)
+  {
+    return true;
+  }
+  // whether to select new triggers during the search
+  bool regenerate = options().quantifiers.incrementTriggers;
+  int regenerateFrequency = regenerate ? 3 : 1;
+  bool gen = false;
+  if (e == peffort)
+  {
+    if (qt.d_counter < 0)
+    {
+      qt.d_counter = 0;
+      gen = true;
+    }
+    else
+    {
+      qt.d_counter++;
+      gen = regenerate && qt.d_counter % regenerateFrequency == 0;
+    }
+  }
+  else
+  {
+    gen = true;
+  }
+  if (gen)
+  {
+    d_triggerGen.generateTriggers(q, qt);
+  }
+
+  bool hasInst = false;
+  for (size_t r = 0; r < 2; r++)
+  {
+    for (CcfvTriggerEntry& tr : qt.d_auto[r])
+    {
+      if (tr.d_round == d_checkCount)
+      {
+        // trigger is already processed this round
+        continue;
+      }
+      tr.d_round = d_checkCount;
+      hasInst = processTrigger(q, tr) > 0 || hasInst;
+      if (d_qstate.isInConflict())
+      {
+        break;
+      }
+    }
+    if (d_qstate.isInConflict()
+        || (hasInst && options().quantifiers.multiTriggerPriority))
+    {
+      break;
+    }
+  }
+  return false;
+}
+
+void CcfvEngine::doInstantiationRound(Theory::Effort effort)
+{
+  size_t lastWaiting = d_qim.numPendingLemmas();
+  // iterate over an internal effort level e
+  int e = 0;
+  int eLimit = effort == Theory::EFFORT_LAST_CALL ? 10 : 2;
+  bool useUser =
+      options().quantifiers.userPatternsQuant != options::UserPatMode::IGNORE;
+  bool finished = false;
+  // while unfinished, try effort level=0,1,2....
+  while (!finished && e <= eLimit)
+  {
+    finished = true;
+    for (const Node& q : d_quants)
+    {
+      CcfvQuantTriggers& qt = d_triggerGen.getQuantTriggers(q);
+      if (useUser && processUserPatterns(q, qt, e))
+      {
+        finished = false;
+      }
+      if (d_qstate.isInConflict())
+      {
+        return;
+      }
+      if (processAutoGen(q, qt, e))
+      {
+        finished = false;
+      }
+      if (d_qstate.isInConflict())
+      {
+        return;
+      }
+    }
+    // do not consider another level if already added lemma at this level
+    if (d_qim.numPendingLemmas() > lastWaiting)
+    {
+      finished = true;
+    }
+    e++;
+  }
+}
+
+void CcfvEngine::checkTriggerInst(Theory::Effort level)
 {
   Trace("ccfv") << "CcfvEngine: Starting trigger-based instantiation check"
                 << std::endl;
@@ -192,216 +371,129 @@ void CcfvEngine::checkTriggerInst(CVC5_UNUSED Theory::Effort level)
     return;
   }
 
+  ++d_checkCount;
+
+  // collect all active quantified formulas belonging to this module
   FirstOrderModel* fm = d_treg.getModel();
   size_t nquant = fm->getNumAssertedQuantifiers();
-  Instantiate* qinst = d_qim.getInstantiate();
-  eq::EqualityEngine* ee = d_qstate.getEqualityEngine();
-
-  Trace("ccfv") << "CcfvEngine: " << nquant << " asserted quantifiers in model"
-                << std::endl;
-
+  d_quants.clear();
   for (size_t i = 0; i < nquant; ++i)
   {
-    TNode q = fm->getAssertedQuantifier(i, true);
-    if (!fm->isQuantifierActive(q))
+    Node q = fm->getAssertedQuantifier(i, true);
+    if (shouldProcess(q) && fm->isQuantifierActive(q))
     {
-      continue;
-    }
-
-    Trace("ccfv-debug") << "CcfvEngine: Checking quantifier: " << q
-                        << std::endl;
-
-    std::vector<Node> freeVars(q[0].begin(), q[0].end());
-
-    auto it = d_qTriggers.find(q);
-    if (it == d_qTriggers.end())
-    {
-      std::vector<std::vector<Node>> triggers;
-
-      if (q.getNumChildren() == 3)
-      {
-        Trace("ccfv-debug")
-            << "CcfvEngine: User-defined triggers: " << q[2] << std::endl;
-        for (TNode userPattern : q[2])
-        {
-          if (userPattern.getKind() != Kind::INST_PATTERN)
-          {
-            continue;
-          }
-
-          std::vector<Node> patList = {};
-          for (TNode pattern : userPattern)
-          {
-            if (ccfv::isSupportedTriggerTerm(pattern))
-            {
-              patList.push_back(pattern);
-            }
-          }
-          if (patList.size() == userPattern.getNumChildren())
-          {
-            triggers.push_back(patList);
-          }
-        }
-      }
-
-      if (triggers.empty())
-      {
-        Trace("ccfv-debug")
-            << "CcfvEngine: Automatic trigger selection" << std::endl;
-        std::vector<Node> patterns;
-        std::map<Node, inst::TriggerTermInfo> tinfo;
-        inst::PatternTermSelector pts(
-            q, options().quantifiers.triggerSelMode, {}, true, false, false);
-        pts.collect(d_qreg.getInstConstantBody(q), patterns, tinfo);
-        std::vector<Node> multiTrigger;
-        for (size_t k = 0; k < patterns.size(); ++k)
-        {
-          size_t freeVarsNum = tinfo[patterns[k]].d_fv.size();
-          Node pattern =
-              d_qreg.substituteInstConstantsToBoundVariables(patterns[k], q);
-
-          if (!ccfv::isSupportedTriggerTerm(pattern))
-          {
-            continue;
-          }
-
-          if (freeVarsNum == freeVars.size())
-          {
-            triggers.push_back({pattern});
-          }
-          else
-          {
-            multiTrigger.push_back(pattern);
-          }
-        }
-
-        if (triggers.empty() && !multiTrigger.empty())
-        {
-          triggers.push_back(multiTrigger);
-        }
-      }
-
-      it = d_qTriggers.emplace(q, std::move(triggers)).first;
-    }
-
-    const auto& triggers = it->second;
-
-    if (triggers.empty())
-    {
-      Trace("ccfv-debug") << "  No triggers found, skipping." << std::endl;
-      continue;
-    }
-
-    Trace("ccfv-debug") << "  Set of triggers:" << std::endl;
-    for (const std::vector<Node>& patterns : triggers)
-    {
-      Trace("ccfv-debug") << "  " << patterns << std::endl;
-    }
-
-    Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
-    int addedLemmas = 0;
-    const ccfv::CcfvIndices& indices = getIndices(ee);
-
-    // Generating L candidates
-    // Knuth Odometer algorithm (The Art of Computer Programming, volume 4A)
-    for (const std::vector<Node>& trigger : triggers)
-    {
-      size_t triggerSize = trigger.size();
-      bool canMatch = true;
-
-      for (TNode pat : trigger)
-      {
-        if (indices.getReps(pat.getOperator()).empty())
-        {
-          canMatch = false;
-          break;
-        }
-      }
-
-      if (!canMatch) continue;
-
-      std::vector<int> idx(triggerSize, 0);
-      while (true)
-      {
-        std::vector<Node> L = {};
-
-        for (size_t k = 0; k < triggerSize; ++k)
-        {
-          TNode f = trigger[k].getOperator();
-          TNode t = indices.getReps(f)[idx[k]];
-          L.push_back(trigger[k].eqNode(t));
-        }
-
-        Trace("ccfv-debug")
-            << "  Selecting grounded trigger: " << L << std::endl;
-        std::vector<std::vector<Node>> substitutions;
-        bool solved = false;
-        {
-          TimerStat::CodeTimer timer(d_stats.d_solveTime);
-          solved = d_solver->solve(options().quantifiers.ccfvMode,
-                                   freeVars,
-                                   L,
-                                   ee,
-                                   indices,
-                                   substitutions);
-        }
-        if (solved)
-        {
-          Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
-                        << " substitutions for " << q << std::endl;
-          for (std::vector<Node>& sub : substitutions)
-          {
-            Trace("ccfv-debug")
-                << "  Applying instantiation terms: " << freeVars << " mapsto "
-                << sub << std::endl;
-            if (qinst->addInstantiation(
-                    q, sub, InferenceId::QUANTIFIERS_INST_E_MATCHING))
-            {
-              addedLemmas++;
-              if (d_qstate.isInConflict()) return;
-            }
-          }
-        }
-        else
-        {
-          Trace("ccfv-debug")
-              << "  No relevant substitution found with this triggers"
-              << std::endl;
-        }
-
-        int pos = triggerSize - 1;
-        while (pos >= 0)
-        {
-          Node fPos = trigger[pos].getOperator();
-          idx[pos]++;
-          if (idx[pos] < (int)indices.getReps(fPos).size())
-          {
-            break;
-          }
-          idx[pos] = 0;
-          pos--;
-        }
-
-        if (pos < 0)
-        {
-          break;
-        }
-      }
-    }
-
-    if (addedLemmas > 0)
-    {
-      Trace("ccfv-debug") << addedLemmas
-                          << " added lemmas with trigger-based instantiation"
-                          << std::endl;
-    }
-    else
-    {
-      Trace("ccfv-debug") << "  No relevant substitution found with "
-                             "trigger-based instantiation for quantifier "
-                          << q << std::endl;
+      d_quants.push_back(q);
     }
   }
+  Trace("ccfv") << "CcfvEngine: " << d_quants.size() << "/" << nquant
+                << " quantifiers to process" << std::endl;
+
+  if (!d_quants.empty())
+  {
+    doInstantiationRound(level);
+  }
+  d_quants.clear();
+}
+
+uint64_t CcfvEngine::processTrigger(Node q, const CcfvTriggerEntry& tr)
+{
+  uint64_t addedLemmas = 0;
+  eq::EqualityEngine* ee = d_qstate.getEqualityEngine();
+  Instantiate* qinst = d_qim.getInstantiate();
+
+  // for each ground term t that does not exist in the equality engine, we add
+  // a purification lemma of the form (k = t)
+  for (const Node& gt : tr.d_groundTerms)
+  {
+    if (!ee->hasTerm(gt) && !gt.getType().isBoolean())
+    {
+      Node k = SkolemManager::mkPurifySkolem(gt);
+      Trace("ccfv-debug") << "  Ground term purify lemma: " << k.eqNode(gt)
+                          << std::endl;
+      d_qim.addPendingLemma(k.eqNode(gt), InferenceId::QUANTIFIERS_GT_PURIFY);
+      addedLemmas++;
+    }
+  }
+
+  const std::vector<Node>& trigger = tr.d_pats;
+  std::vector<Node> freeVars(q[0].begin(), q[0].end());
+  const ccfv::CcfvIndices& indices = getIndices(ee);
+  Trace("ccfv-debug") << "  Trigger: " << trigger << std::endl;
+
+  size_t triggerSize = trigger.size();
+  for (TNode pat : trigger)
+  {
+    if (indices.getReps(pat.getOperator()).empty())
+    {
+      return addedLemmas;
+    }
+  }
+
+  // Generating L candidates
+  // Knuth Odometer algorithm (The Art of Computer Programming, volume 4A)
+  std::vector<int> idx(triggerSize, 0);
+  while (true)
+  {
+    std::vector<Node> L = {};
+
+    for (size_t k = 0; k < triggerSize; ++k)
+    {
+      TNode f = trigger[k].getOperator();
+      TNode t = indices.getReps(f)[idx[k]];
+      L.push_back(trigger[k].eqNode(t));
+    }
+
+    Trace("ccfv-debug") << "  Selecting grounded trigger: " << L << std::endl;
+    std::vector<std::vector<Node>> substitutions;
+    bool solved = false;
+    {
+      TimerStat::CodeTimer timer(d_stats.d_solveTime);
+      solved = d_solver->solve(options().quantifiers.ccfvMode,
+                               freeVars,
+                               L,
+                               ee,
+                               indices,
+                               substitutions);
+    }
+    if (solved)
+    {
+      Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
+                    << " substitutions for " << q << std::endl;
+      for (std::vector<Node>& sub : substitutions)
+      {
+        Trace("ccfv-debug") << "  Applying instantiation terms: " << freeVars
+                            << " mapsto " << sub << std::endl;
+        if (qinst->addInstantiation(
+                q, sub, InferenceId::QUANTIFIERS_INST_E_MATCHING))
+        {
+          addedLemmas++;
+          if (d_qstate.isInConflict())
+          {
+            return addedLemmas;
+          }
+        }
+      }
+    }
+
+    int pos = triggerSize - 1;
+    while (pos >= 0)
+    {
+      Node fPos = trigger[pos].getOperator();
+      idx[pos]++;
+      if (idx[pos] < (int)indices.getReps(fPos).size())
+      {
+        break;
+      }
+      idx[pos] = 0;
+      pos--;
+    }
+
+    if (pos < 0)
+    {
+      break;
+    }
+  }
+  return addedLemmas;
 }
 
 }  // namespace quantifiers

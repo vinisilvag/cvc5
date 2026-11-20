@@ -156,43 +156,6 @@ Node FloatersUnionFind::getChild(TNode rep, size_t index) const
   return it->second;
 }
 
-void FloatersUnionFind::debugPrint(std::ostream& out)
-{
-  std::map<Node, std::vector<Node>> eqClasses;
-  for (const auto& [node, _] : d_representative)
-  {
-    Node root = find(node);
-    eqClasses[root].push_back(node);
-  }
-
-  out << "================= Floater Equivalences (<~>) ================="
-      << std::endl;
-  if (eqClasses.empty())
-  {
-    out << "  (No class registered)" << std::endl;
-  }
-
-  for (const auto& [root, members] : eqClasses)
-  {
-    out << "  Class [" << root << "]: { ";
-    for (size_t i = 0; i < members.size(); ++i)
-    {
-      out << members[i] << (i + 1 < members.size() ? ", " : " ");
-    }
-    out << "}" << std::endl;
-
-    Node c0 = getChild(root, 0);
-    Node c1 = getChild(root, 1);
-    if (!c0.isNull() || !c1.isNull())
-    {
-      out << "    Children: " << (c0.isNull() ? "?" : c0.toString()) << " @ "
-          << (c1.isNull() ? "?" : c1.toString()) << std::endl;
-    }
-  }
-  out << "=============================================================="
-      << std::endl;
-}
-
 void FloatersUnionFind::setChild(TNode rep, size_t index, TNode x)
 {
   Assert(index < 2) << "Index must be 0 or 1";
@@ -255,8 +218,6 @@ void HoccfvUtils::computeFloaterEquivalences()
     toMerge.pop_back();
     d_dsu->merge(curr.first, curr.second, toMerge);
   }
-
-  debugPrintFloaterEquivalences();
 }
 
 void HoccfvUtils::applyGroundOrTypeConstraints()
@@ -317,64 +278,6 @@ void HoccfvUtils::applyGroundOrTypeConstraints()
       }
     }
   }
-
-  debugPrintGroundOrTypeConstraints();
-}
-
-void HoccfvUtils::debugPrintGroundOrTypeConstraints(std::ostream& out)
-{
-  out << "=========== Ground and Type Constraints Report ==========="
-      << std::endl;
-
-  std::map<Node, std::vector<Node>> classes;
-  for (TNode var : d_freeVars)
-  {
-    classes[d_dsu->find(var)].push_back(var);
-  }
-
-  if (classes.empty())
-  {
-    out << "  (No variable registered)" << std::endl;
-  }
-
-  for (const auto& [root, members] : classes)
-  {
-    bool floatable = isFloatable(root);
-
-    out << "Classe [" << root << "] "
-        << (floatable ? "[FLOATABLE]" : "[BLOCKED: NOT FLOATABLE]")
-        << std::endl;
-    out << "  - Type: " << root.getType() << std::endl;
-    out << "  - Members: { ";
-    for (size_t i = 0; i < members.size(); ++i)
-    {
-      out << members[i] << (i + 1 < members.size() ? ", " : " ");
-    }
-    out << "}" << std::endl;
-
-    Node c0 = d_dsu->getChild(root, 0);
-    Node c1 = d_dsu->getChild(root, 1);
-    if (!c0.isNull() || !c1.isNull())
-    {
-      out << "  - Structured children: (" << (c0.isNull() ? "?" : c0.toString())
-          << " @ " << (c1.isNull() ? "?" : c1.toString()) << ")" << std::endl;
-    }
-
-    auto itG0 = d_ground[0].find(root);
-    auto itG1 = d_ground[1].find(root);
-    if (itG0 != d_ground[0].end() || itG1 != d_ground[1].end())
-    {
-      out << "  - Ground fixed children: ("
-          << (itG0 != d_ground[0].end() ? itG0->second.toString() : "-")
-          << " @ "
-          << (itG1 != d_ground[1].end() ? itG1->second.toString() : "-") << ")"
-          << std::endl;
-    }
-    out << "----------------------------------------------------------"
-        << std::endl;
-  }
-  out << "=========================================================="
-      << std::endl;
 }
 
 Node HoccfvUtils::getGround(TNode rep, size_t index) const
