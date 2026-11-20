@@ -176,6 +176,11 @@ CcfvQuantTriggers& CcfvTriggerGenerator::getQuantTriggers(Node q)
     }
   }
 
+  Trace("ccfv-debug") << "[triggers] user patterns of " << q << ": "
+                      << (qt.d_hasUserPatterns ? "yes" : "no") << ", "
+                      << qt.d_user.size() << " usable trigger(s), "
+                      << qt.d_noPatterns.size() << " no-pattern(s)"
+                      << std::endl;
   return qt;
 }
 
@@ -190,7 +195,8 @@ bool CcfvTriggerGenerator::makeTrigger(Node q,
     Node pat = d_qreg.substituteInstConstantsToBoundVariables(np, q);
     if (!ccfv::isSupportedTriggerTerm(pat))
     {
-      Trace("ccfv-debug") << "  Unsupported trigger term: " << pat << std::endl;
+      Trace("ccfv-debug") << "[triggers] unsupported trigger term: " << pat
+                          << std::endl;
       return false;
     }
     tr.d_pats.push_back(pat);
@@ -226,14 +232,18 @@ bool CcfvTriggerGenerator::generatePatternTerms(Node q, CcfvQuantTriggers& qt)
   // generated if the patterns do not cover all variables
   if (qt.d_numTriggerVars > 0 && qt.d_numTriggerVars < nvars)
   {
-    Trace("ccfv-debug") << "  Patterns do not contain all variables of " << q
-                        << std::endl;
+    Trace("ccfv") << "[triggers] no triggers for " << q
+                  << ": the patterns do not contain all its variables"
+                  << std::endl;
     return false;
   }
   for (const Node& p : patterns)
   {
     qt.d_pool[tinfo[p].d_fv.size() == nvars ? 0 : 1].push_back(p);
   }
+  Trace("ccfv-debug") << "[triggers] pattern pools of " << q << ": "
+                      << qt.d_pool[0].size() << " single, "
+                      << qt.d_pool[1].size() << " multi" << std::endl;
   return true;
 }
 
@@ -248,6 +258,8 @@ void CcfvTriggerGenerator::addAutoTrigger(Node q,
   {
     if (t.d_key == key)
     {
+      Trace("ccfv-debug") << "[triggers] trigger already exists for " << q
+                          << std::endl;
       return;
     }
   }
@@ -256,6 +268,9 @@ void CcfvTriggerGenerator::addAutoTrigger(Node q,
   if (makeTrigger(q, icPats, tr))
   {
     qt.d_auto[r].push_back(std::move(tr));
+    Trace("ccfv") << "[triggers] new " << (r == 0 ? "single" : "multi")
+                  << " trigger for " << q << ": " << qt.d_auto[r].back().d_pats
+                  << std::endl;
   }
 }
 
@@ -292,6 +307,8 @@ void CcfvTriggerGenerator::generateTriggers(Node q, CcfvQuantTriggers& qt)
   }
   if (alreadyMadeTriggers)
   {
+    Trace("ccfv-debug") << "[triggers] regenerating the multi-trigger of " << q
+                        << std::endl;
     // shuffle randomly if we have already made a multi-trigger
     std::shuffle(multi.begin(), multi.end(), Random::getRandom());
   }

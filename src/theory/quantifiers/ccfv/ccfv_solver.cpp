@@ -36,29 +36,27 @@ bool CcfvSolver::solve(options::CcfvMode mode,
                        const ccfv::CcfvIndices& indices,
                        std::vector<std::vector<Node>>& substitutions)
 {
-  Trace("ccfv-solver") << "CcfvSolver::solve: " << freeVars.size()
-                       << " free vars, " << lits.size() << " literals in L"
-                       << std::endl;
-  if (TraceIsOn("ccfv-solver-debug"))
-  {
-    Trace("ccfv-solver-debug") << "  Vars: " << freeVars << std::endl;
-    Trace("ccfv-solver-debug") << "  L: " << lits << std::endl;
-  }
+  Trace("ccfv-debug") << "[solver] free vars: " << freeVars << std::endl;
+  Trace("ccfv-debug") << "[solver] L: " << lits << std::endl;
 
+  bool solved = false;
   if (mode == options::CcfvMode::DECISION)
   {
-    Trace("ccfv-solver") << "  Dispatching to: Decision Procedure backend"
-                         << std::endl;
-    return d_backtrackingSolver.solve(
-        freeVars, lits, ee, indices, substitutions);
+    solved =
+        d_backtrackingSolver.solve(freeVars, lits, ee, indices, substitutions);
   }
   else if (mode == options::CcfvMode::SAT)
   {
-    Trace("ccfv-solver") << "  Dispatching to: SAT Encoding backend"
-                         << std::endl;
-    return d_satSolver.solve(freeVars, lits, ee, substitutions);
+    solved = d_satSolver.solve(freeVars, lits, ee, substitutions);
   }
-  return false;
+
+  Trace("ccfv") << "[solver] "
+                << (mode == options::CcfvMode::DECISION ? "backtracking"
+                                                        : "sat")
+                << ": " << freeVars.size() << " free vars, " << lits.size()
+                << " literals, " << substitutions.size() << " solution(s)"
+                << std::endl;
+  return solved;
 }
 
 }  // namespace quantifiers

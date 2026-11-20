@@ -260,9 +260,10 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
 
   std::vector<std::vector<Node>> sols;
 
-  Trace("ccfv") << "  CcfvEngine: L " << lits << std::endl;
-  Trace("ccfv") << "  CcfvEngine: Processing " << c << std::endl;
-  Trace("ccfv") << "  CcfvEngine: Remaining L " << newLits << std::endl;
+  Trace("ccfv-debug") << "[backtracking]   L " << lits << std::endl;
+  Trace("ccfv-debug") << "[backtracking]   Processing " << c << std::endl;
+  Trace("ccfv-debug") << "[backtracking]   Remaining L " << newLits
+                      << std::endl;
 
   switch (c.getKind())
   {
@@ -274,9 +275,10 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
       // s = s
       if (l == r)
       {
-        Trace("ccfv") << "    CcfvEngine: syntactic equality (" << l << " = "
-                      << r << ")" << std::endl;
-        Trace("ccfv") << "    CcfvEngine: removing from C" << std::endl;
+        Trace("ccfv-debug") << "[backtracking]     syntactic equality (" << l
+                            << " = " << r << ")" << std::endl;
+        Trace("ccfv-debug")
+            << "[backtracking]     removing from C" << std::endl;
         return solveRec(freeVars, newLits, ee, indices, currentSubstitution);
       }
 
@@ -285,14 +287,15 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
       bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
       if (lIsGround && rIsGround)
       {
-        Trace("ccfv") << "    CcfvEngine: ground equality (" << l << " = " << r
-                      << ")" << std::endl;
+        Trace("ccfv-debug") << "[backtracking]     ground equality (" << l
+                            << " = " << r << ")" << std::endl;
         if (ee->hasTerm(l) && ee->hasTerm(r))
         {
           if (ee->areEqual(l, r))
           {
-            Trace("ccfv") << "      CcfvEngine: they are qual, removing from C"
-                          << std::endl;
+            Trace("ccfv-debug")
+                << "[backtracking]       they are equal, removing from C"
+                << std::endl;
             return solveRec(
                 freeVars, newLits, ee, indices, currentSubstitution);
           }
@@ -302,13 +305,13 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
                  && l.getOperator() == r.getOperator()
                  && l.getNumChildren() == r.getNumChildren())
         {
-          Trace("ccfv")
-              << "      CcfvEngine: they are UF with the same operator"
+          Trace("ccfv-debug")
+              << "[backtracking]       they are UF with the same operator"
               << std::endl;
           for (size_t i = 0, n = l.getNumChildren(); i < n; ++i)
           {
-            Trace("ccfv") << "      CcfvEngine: adding " << l[i].eqNode(r[i])
-                          << "to C" << std::endl;
+            Trace("ccfv-debug") << "[backtracking]       adding "
+                                << l[i].eqNode(r[i]) << "to C" << std::endl;
             newLits.push_back(l[i].eqNode(r[i]));
           }
           return solveRec(freeVars, newLits, ee, indices, currentSubstitution);
@@ -323,20 +326,21 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         TNode variable = (l.getKind() == Kind::BOUND_VARIABLE ? l : r);
         TNode term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
 
-        Trace("ccfv") << "    CcfvEngine: assignment (" << variable << " = "
-                      << term << ")" << std::endl;
+        Trace("ccfv-debug") << "[backtracking]     assignment (" << variable
+                            << " = " << term << ")" << std::endl;
 
         if (!expr::hasSubterm(term, variable))
         {
-          Trace("ccfv") << "      CcfvEngine: adding " << variable << " = "
-                        << term << " to the solution" << std::endl;
+          Trace("ccfv-debug")
+              << "[backtracking]       adding " << variable << " = " << term
+              << " to the solution" << std::endl;
           for (Node& t : currentSubstitution)
           {
             t = t.substitute(TNode(variable), TNode(term));
           }
-          Trace("ccfv") << "      CcfvEngine: applying (" << variable
-                        << " mapsto " << term << ") to terms that have "
-                        << variable << " in " << newLits << std::endl;
+          Trace("ccfv-debug") << "[backtracking]       applying (" << variable
+                              << " mapsto " << term << ") to terms that have "
+                              << variable << " in " << newLits << std::endl;
           for (Node& lit : newLits)
           {
             lit = lit.substitute(TNode(variable), TNode(term));
@@ -348,13 +352,13 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
           if (term.hasOperator())
           {
             Node op = term.getOperator();
-            Trace("ccfv") << "      CcfvEngine: Uvar (" << variable
-                          << " occurs in " << term << " with op = " << op << ")"
-                          << std::endl;
+            Trace("ccfv-debug")
+                << "[backtracking]       Uvar (" << variable << " occurs in "
+                << term << " with op = " << op << ")" << std::endl;
             for (const Node& t : indices.getReps(op))
             {
-              Trace("ccfv")
-                  << "      CcfvEngine: adding " << term.eqNode(t) << " and "
+              Trace("ccfv-debug")
+                  << "[backtracking]       adding " << term.eqNode(t) << " and "
                   << variable.eqNode(t) << " to C" << std::endl;
               std::vector<Node> branchLits = newLits;
               branchLits.push_back(term.eqNode(t));
@@ -379,23 +383,26 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         TNode t = ee->hasTerm(r) ? r : l;
         TNode op = fTerm.getOperator();
 
-        Trace("ccfv") << "    CcfvEngine: E-Matching UF with ground term ("
-                      << fTerm << " = " << t << ")" << std::endl;
+        Trace("ccfv-debug")
+            << "[backtracking]     E-Matching UF with ground term (" << fTerm
+            << " = " << t << ")" << std::endl;
 
-        Trace("ccfv") << "      CcfvEngine: E-Matching all UF terms with op = "
-                      << op << " in the equivalence class of " << t
-                      << std::endl;
+        Trace("ccfv-debug")
+            << "[backtracking]       E-Matching all UF terms with op = " << op
+            << " in the equivalence class of " << t << std::endl;
         for (const Node& app : indices.getApps(op, t))
         {
           Assert(fTerm.getNumChildren() == app.getNumChildren());
 
-          Trace("ccfv") << "      CcfvEngine: E-Matching " << app << " with "
-                        << t << " and adding it to C" << std::endl;
+          Trace("ccfv-debug")
+              << "[backtracking]       E-Matching " << app << " with " << t
+              << " and adding it to C" << std::endl;
           std::vector<Node> branchLits = newLits;
           for (size_t i = 0, n = fTerm.getNumChildren(); i < n; ++i)
           {
-            Trace("ccfv") << "      CcfvEngine: adding "
-                          << fTerm[i].eqNode(app[i]) << " to C" << std::endl;
+            Trace("ccfv-debug")
+                << "[backtracking]       adding " << fTerm[i].eqNode(app[i])
+                << " to C" << std::endl;
             branchLits.push_back(fTerm[i].eqNode(app[i]));
           }
           std::vector<std::vector<Node>> branchSols =
@@ -410,20 +417,21 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
       // f(u_n) = g(u'_n) or g(u'_n) = f(u_n)
       if (l.hasOperator() && r.hasOperator())
       {
-        Trace("ccfv") << "    CcfvEngine: E-Matching with UF (" << l << " = "
-                      << r << ")" << std::endl;
+        Trace("ccfv-debug") << "[backtracking]     E-Matching with UF (" << l
+                            << " = " << r << ")" << std::endl;
 
         if (l.getOperator() == r.getOperator())
         {
           Assert(l.getNumChildren() == r.getNumChildren());
-          Trace("ccfv") << "      CcfvEngine: both UF has the same operator"
-                        << std::endl;
+          Trace("ccfv-debug")
+              << "[backtracking]       both UF has the same operator"
+              << std::endl;
 
           std::vector<Node> branchLits = newLits;
           for (size_t i = 0, n = l.getNumChildren(); i < n; ++i)
           {
-            Trace("ccfv") << "      CcfvEngine: unifying arguments: "
-                          << l[i].eqNode(r[i]) << std::endl;
+            Trace("ccfv-debug") << "[backtracking]       unifying arguments: "
+                                << l[i].eqNode(r[i]) << std::endl;
             branchLits.push_back(l[i].eqNode(r[i]));
           }
           std::vector<std::vector<Node>> branchSols =
@@ -434,10 +442,11 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         for (const Node& t : indices.getReps(l.getOperator()))
         {
           std::vector<Node> branchLits = newLits;
-          Trace("ccfv") << "      CcfvEngine: E-Matching them with ground "
-                           "terms within the same "
-                           "equivalence class "
-                        << l.eqNode(t) << " and " << r.eqNode(t) << std::endl;
+          Trace("ccfv-debug")
+              << "[backtracking]       E-Matching them with ground "
+                 "terms within the same "
+                 "equivalence class "
+              << l.eqNode(t) << " and " << r.eqNode(t) << std::endl;
           branchLits.push_back(l.eqNode(t));
           branchLits.push_back(r.eqNode(t));
           std::vector<std::vector<Node>> branchSols =
@@ -459,8 +468,8 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
 
       if (l == r)
       {
-        Trace("ccfv") << "    CcfvEngine: syntactic disequality (" << l
-                      << " != " << r << "), failing branch" << std::endl;
+        Trace("ccfv-debug") << "[backtracking]     syntactic disequality (" << l
+                            << " != " << r << "), failing branch" << std::endl;
         return {};
       }
 
@@ -469,19 +478,19 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
       bool lIsGround = ccfv::isGround(l), rIsGround = ccfv::isGround(r);
       if (lIsGround && rIsGround)
       {
-        Trace("ccfv") << "    CcfvEngine: ground disequality (" << l
-                      << " != " << r << ")" << std::endl;
+        Trace("ccfv-debug") << "[backtracking]     ground disequality (" << l
+                            << " != " << r << ")" << std::endl;
         if (ee->hasTerm(l) && ee->hasTerm(r))
         {
           if (!ee->areDisequal(l, r, false))
           {
-            Trace("ccfv")
-                << "      CcfvEngine: they are not disequal, failing branch"
+            Trace("ccfv-debug")
+                << "[backtracking]       they are not disequal, failing branch"
                 << std::endl;
             return {};
           }
-          Trace("ccfv")
-              << "      CcfvEngine: they are disequal, removing from C"
+          Trace("ccfv-debug")
+              << "[backtracking]       they are disequal, removing from C"
               << std::endl;
           return solveRec(freeVars, newLits, ee, indices, currentSubstitution);
         }
@@ -496,14 +505,15 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         Node variable = (l.getKind() == Kind::BOUND_VARIABLE ? l : r);
         Node term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
 
-        Trace("ccfv") << "    CcfvEngine: assignment into a disequal term ("
-                      << variable << " != " << term << ")" << std::endl;
+        Trace("ccfv-debug")
+            << "[backtracking]     assignment into a disequal term ("
+            << variable << " != " << term << ")" << std::endl;
 
         for (const Node& t : indices.getDiseqs(term))
         {
-          Trace("ccfv") << "      CcfvEngine: assigning " << variable
-                        << " to disequal rep " << t << " ("
-                        << variable.eqNode(t) << ")" << std::endl;
+          Trace("ccfv-debug") << "[backtracking]       assigning " << variable
+                              << " to disequal rep " << t << " ("
+                              << variable.eqNode(t) << ")" << std::endl;
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(variable.eqNode(t));
           std::vector<std::vector<Node>> branchSols =
@@ -523,15 +533,16 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         Node fTerm = ee->hasTerm(r) ? l : r;
         Node t = ee->hasTerm(r) ? r : l;
 
-        Trace("ccfv") << "    CcfvEngine: E-Matching UF with disequal ground "
-                         "term ("
-                      << fTerm << " != " << t << ")" << std::endl;
+        Trace("ccfv-debug")
+            << "[backtracking]     E-Matching UF with disequal ground "
+               "term ("
+            << fTerm << " != " << t << ")" << std::endl;
 
         for (const Node& tt : indices.getDiseqs(t))
         {
-          Trace("ccfv") << "      CcfvEngine: E-Matching " << fTerm
-                        << " with disequal rep " << tt << " and adding "
-                        << fTerm.eqNode(tt) << " to C" << std::endl;
+          Trace("ccfv-debug") << "[backtracking]       E-Matching " << fTerm
+                              << " with disequal rep " << tt << " and adding "
+                              << fTerm.eqNode(tt) << " to C" << std::endl;
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(fTerm.eqNode(tt));
           std::vector<std::vector<Node>> branchSols =
@@ -550,14 +561,14 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         Node variable = (l.getKind() == Kind::BOUND_VARIABLE ? l : r);
         Node term = (l.getKind() == Kind::BOUND_VARIABLE ? r : l);
 
-        Trace("ccfv") << "    CcfvEngine: DFapp (" << variable << " != " << term
-                      << ")" << std::endl;
+        Trace("ccfv-debug") << "[backtracking]     DFapp (" << variable
+                            << " != " << term << ")" << std::endl;
 
         for (const Node& t : indices.getReps(term.getOperator()))
         {
-          Trace("ccfv") << "      CcfvEngine: adding " << term.eqNode(t)
-                        << " and " << variable.eqNode(t).negate() << " to C"
-                        << std::endl;
+          Trace("ccfv-debug")
+              << "[backtracking]       adding " << term.eqNode(t) << " and "
+              << variable.eqNode(t).negate() << " to C" << std::endl;
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(term.eqNode(t));
           branchLits.push_back(variable.eqNode(t).negate());
@@ -573,12 +584,14 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
       // f(u_n) != g(u'_n) or g(u'_n) != f(u_n)
       if (l.hasOperator() && r.hasOperator())
       {
-        Trace("ccfv") << "    CcfvEngine: E-Matching into disequal terms (" << l
-                      << " != " << r << ")" << std::endl;
+        Trace("ccfv-debug")
+            << "[backtracking]     E-Matching into disequal terms (" << l
+            << " != " << r << ")" << std::endl;
         for (const Node& t : indices.getReps(l.getOperator()))
         {
-          Trace("ccfv") << "      CcfvEngine: adding " << l.eqNode(t) << " and "
-                        << r.eqNode(t).negate() << " to C" << std::endl;
+          Trace("ccfv-debug")
+              << "[backtracking]       adding " << l.eqNode(t) << " and "
+              << r.eqNode(t).negate() << " to C" << std::endl;
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(l.eqNode(t));
           branchLits.push_back(r.eqNode(t).negate());
@@ -595,15 +608,16 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
       if (l.getKind() == Kind::BOUND_VARIABLE
           && r.getKind() == Kind::BOUND_VARIABLE)
       {
-        Trace("ccfv") << "    CcfvEngine: DVar (" << l << " != " << r << ")"
-                      << std::endl;
+        Trace("ccfv-debug") << "[backtracking]     DVar (" << l << " != " << r
+                            << ")" << std::endl;
 
         for (TNode rep : indices.getRepsOfType(l.getType()))
         {
           for (const Node& t : indices.getDiseqs(rep))
           {
-            Trace("ccfv") << "      CcfvEngine: adding " << l.eqNode(rep)
-                          << " and " << r.eqNode(t) << " to C" << std::endl;
+            Trace("ccfv-debug")
+                << "[backtracking]       adding " << l.eqNode(rep) << " and "
+                << r.eqNode(t) << " to C" << std::endl;
             std::vector<Node> branchLits = newLits;
             branchLits.push_back(l.eqNode(rep));
             branchLits.push_back(r.eqNode(t));
@@ -653,8 +667,9 @@ bool CcfvBacktrackingSolver::solve(
       {
         Node groundTerm = indices.fallbackForType(freeVars[i].getType());
 
-        Trace("ccfv") << "  CcfvEngine: Grounding remaining free variable "
-                      << freeVars[i] << " with " << groundTerm << std::endl;
+        Trace("ccfv-debug")
+            << "[backtracking]   Grounding remaining free variable "
+            << freeVars[i] << " with " << groundTerm << std::endl;
 
         // Substitute the variable with the ground term
         for (Node& t : sub)

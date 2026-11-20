@@ -132,9 +132,20 @@ Node computePrenex(NodeManager* nm, TNode n, std::vector<Node>& vars);
 
 std::vector<std::vector<Node>> toCnf(TNode n);
 
+/** The result of converting a quantified formula into CNF. */
+enum class CnfStatus
+{
+  /** The quantifier was converted. */
+  SUCCESS,
+  /** The quantifier has constructs that are not supported. */
+  UNSUPPORTED,
+  /** The CNF would exceed the literal limit, so it was not built. */
+  TOO_LARGE
+};
+
 /**
- * Full preprocessing pipeline converting an asserted quantifier into CNF for
- * CCFV.
+ * Full preprocessing pipeline converting an asserted quantified formula into
+ * CNF for CCFV.
  *
  * Executes the three-stage transformation:
  *   1. NNF conversion via computeNnf;
@@ -144,12 +155,17 @@ std::vector<std::vector<Node>> toCnf(TNode n);
  * @param q The asserted quantified formula.
  * @param vars Output vector receiving all universal free variables.
  * @param clauses Output collection receiving the generated CNF clauses.
- * @return true if the quantifier was successfully converted, false otherwise.
+ * @param cnfLiteralLimit The maximum number of literals of the CNF (0 for no
+ * limit). It is checked before the distributivity, so a CNF that would exceed
+ * it is never built.
+ * @return SUCCESS if the quantifier was converted, UNSUPPORTED if it has
+ * constructs the conversion does not handle, TOO_LARGE if its CNF would exceed
+ * the literal limit.
  */
-bool computeQuantCnf(TNode q,
-                     std::vector<Node>& vars,
-                     std::vector<std::vector<Node>>& clauses,
-                     uint64_t cnfLiteralLimit);
+CnfStatus computeQuantCnf(TNode q,
+                          std::vector<Node>& vars,
+                          std::vector<std::vector<Node>>& clauses,
+                          uint64_t cnfLiteralLimit);
 
 }  // namespace ccfv
 }  // namespace quantifiers

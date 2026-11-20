@@ -413,17 +413,17 @@ CnfSize cnfSize(TNode n, std::unordered_map<Node, CnfSize>& memo)
   return res;
 }
 
-bool computeQuantCnf(TNode q,
-                     std::vector<Node>& vars,
-                     std::vector<std::vector<Node>>& clauses,
-                     uint64_t cnfLiteralLimit)
+CnfStatus computeQuantCnf(TNode q,
+                          std::vector<Node>& vars,
+                          std::vector<std::vector<Node>>& clauses,
+                          uint64_t cnfLiteralLimit)
 {
   NodeManager* nm = q.getNodeManager();
 
   Node nnf = computeNnf(nm, q, true);
   if (nnf.isNull())
   {
-    return false;
+    return CnfStatus::UNSUPPORTED;
   }
 
   // Pre-Skolemization to avoid unnecessary dependencies
@@ -431,14 +431,14 @@ bool computeQuantCnf(TNode q,
   Node skolemizedBody = skolemize(nm, nnf, freeVars);
   if (skolemizedBody.isNull())
   {
-    return false;
+    return CnfStatus::UNSUPPORTED;
   }
 
   // Prenexing to lift for all's to the left
   Node prenexBody = computePrenex(nm, skolemizedBody, vars);
   if (prenexBody.isNull())
   {
-    return false;
+    return CnfStatus::UNSUPPORTED;
   }
 
   // Guard against the exponential blow-up of the distributivity
@@ -447,16 +447,16 @@ bool computeQuantCnf(TNode q,
     std::unordered_map<Node, CnfSize> memo;
     if (cnfSize(prenexBody, memo).d_lits > cnfLiteralLimit)
     {
-      Trace("ccfv-cnf") << "CNF of " << q << " exceeds " << cnfLiteralLimit
-                        << " literals, skipping" << std::endl;
-      return false;
+      Trace("ccfv") << "[cnf] CNF of " << q << " exceeds " << cnfLiteralLimit
+                    << " literals, skipping" << std::endl;
+      return CnfStatus::TOO_LARGE;
     }
   }
 
   // Distributivity
   clauses = toCnf(prenexBody);
 
-  return true;
+  return CnfStatus::SUCCESS;
 }
 
 }  // namespace ccfv

@@ -74,7 +74,14 @@ class CcfvEngine : public QuantifiersModule
   struct Statistics
   {
     Statistics(StatisticsRegistry& sr);
-    TimerStat d_solveTime;
+    /** Time of conflict-based instantiation checks (as QCF's d_cbqi_time). */
+    TimerStat d_cbqiTime;
+    /** Time of trigger-based instantiation checks (as the instantiation
+     * engine's d_ematching_time). */
+    TimerStat d_tbqiTime;
+    /** Number of quantified formulas skipped because their CNF would exceed
+     * the literal limit. */
+    IntStat d_cnfLimitExceeded;
   };
   Statistics d_stats;
 

@@ -35,7 +35,9 @@ namespace theory {
 namespace quantifiers {
 
 CcfvEngine::Statistics::Statistics(StatisticsRegistry& sr)
-    : d_solveTime(sr.registerTimer("ccfv::solveTime"))
+    : d_cbqiTime(sr.registerTimer("ccfv::cbqiTime")),
+      d_tbqiTime(sr.registerTimer("ccfv::tbqiTime")),
+      d_cnfLimitExceeded(sr.registerInt("ccfv::cnfLimitExceeded"))
 {
 }
 
@@ -69,33 +71,35 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
 {
   d_indices.reset();
 
-  Trace("ccfv") << "CcfvEngine::check at level " << level << ", effort "
-                << quant_e << std::endl;
+  Trace("ccfv") << "[engine] check at level " << level << ", effort " << quant_e
+                << std::endl;
   if (quant_e == QEFFORT_CONFLICT)
   {
     // Same as QuantConflictFind, which only runs at full effort (it does not
     // follow --inst-when, and never runs at last call)
     if (level == Theory::EFFORT_FULL)
     {
+      // the whole check is timed, as QuantConflictFind does
+      TimerStat::CodeTimer timer(d_stats.d_cbqiTime);
       checkConflictInst(level);
     }
   }
   else if (quant_e == QEFFORT_STANDARD)
   {
+    // the whole check is timed, as the instantiation engine does
+    TimerStat::CodeTimer timer(d_stats.d_tbqiTime);
     checkTriggerInst(level);
   }
 }
 
 void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
 {
-  Trace("ccfv") << "CcfvEngine: Starting conflict-based instantiation check"
+  Trace("ccfv") << "[cbqi] starting conflict-based instantiation check"
                 << std::endl;
 
   if (d_qstate.isConflictingInst())
   {
-    Trace("ccfv") << "CcfvEngine: Model already conflicted, aborting "
-                     "conflict-based instantiation"
-                  << std::endl;
+    Trace("ccfv") << "[cbqi] model already conflicted, aborting" << std::endl;
     return;
   }
 
@@ -104,8 +108,7 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
   Instantiate* qinst = d_qim.getInstantiate();
   eq::EqualityEngine* ee = d_qstate.getEqualityEngine();
 
-  Trace("ccfv") << "CcfvEngine: " << nquant << " asserted quantifiers in model"
-                << std::endl;
+  Trace("ccfv") << "[cbqi] " << nquant << " asserted quantifiers" << std::endl;
 
   for (size_t i = 0; i < nquant; ++i)
   {
@@ -117,16 +120,23 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
       continue;
     }
 
-    Trace("ccfv-debug") << "CcfvEngine: Checking quantifier: " << q
-                        << std::endl;
+    Trace("ccfv-debug") << "[cbqi] checking quantifier: " << q << std::endl;
 
     if (d_quantCnf.find(q) == d_quantCnf.end())
     {
       std::vector<Node> vars;
       std::vector<std::vector<Node>> clauses;
-      if (!ccfv::computeQuantCnf(
-              q, vars, clauses, options().quantifiers.ccfvCnfLiteralLimit))
+      ccfv::CnfStatus cnfStatus = ccfv::computeQuantCnf(
+          q, vars, clauses, options().quantifiers.ccfvCnfLiteralLimit);
+      if (cnfStatus != ccfv::CnfStatus::SUCCESS)
       {
+        if (cnfStatus == ccfv::CnfStatus::TOO_LARGE)
+        {
+          // the quantifier is only attempted once, as its CNF is cached
+          ++d_stats.d_cnfLimitExceeded;
+        }
+        Trace("ccfv") << "[cbqi] skipping " << q << ": no CNF available"
+                      << std::endl;
         d_quantCnf[q] = {};
         continue;
       }
@@ -141,15 +151,14 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
     const std::vector<std::vector<Node>>& clauses = d_quantCnf[q];
     const std::vector<Node>& freeVars = d_quantVars[q];
 
-    Trace("ccfv-debug") << "  Variables: " << freeVars << std::endl;
+    Trace("ccfv-debug") << "[cbqi] variables: " << freeVars << std::endl;
 
     // Set when a conflicting instance was added or when adding failed, in
     // which case q is not checked further this round (as QuantConflictFind)
     bool done = false;
     for (const std::vector<Node>& clause : clauses)
     {
-      Trace("ccfv-debug") << "  Instantiating for clause: " << clause
-                          << std::endl;
+      Trace("ccfv-debug") << "[cbqi] clause: " << clause << std::endl;
       std::vector<Node> L;
       for (TNode lit : clause)
       {
@@ -157,24 +166,21 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
       }
 
       std::vector<std::vector<Node>> substitutions;
-      bool solved = false;
-      {
-        TimerStat::CodeTimer timer(d_stats.d_solveTime);
-        solved = d_solver->solve(options().quantifiers.ccfvMode,
-                                 freeVars,
-                                 L,
-                                 ee,
-                                 getIndices(ee),
-                                 substitutions);
-      }
+      bool solved = d_solver->solve(options().quantifiers.ccfvMode,
+                                    freeVars,
+                                    L,
+                                    ee,
+                                    getIndices(ee),
+                                    substitutions);
       if (solved)
       {
-        Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
-                      << " conflicting instance(s) for " << q << std::endl;
+        Trace("ccfv-debug")
+            << "[cbqi] found " << substitutions.size()
+            << " conflicting instance(s) for " << q << std::endl;
         for (std::vector<Node>& sub : substitutions)
         {
-          Trace("ccfv-debug") << "  Applying instantiation terms: " << freeVars
-                              << " mapsto " << sub << std::endl;
+          Trace("ccfv-debug") << "[cbqi] applying substitution: " << freeVars
+                              << " -> " << sub << std::endl;
 
           // Workaround to avoid different free variables count after prenexing
           std::vector<Node> origSub(sub.begin(),
@@ -184,11 +190,16 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
           {
             // The instance was already added (duplicate): stop with this
             // quantified formula to avoid exponential behavior
+            Trace("ccfv") << "[cbqi] instance for " << q
+                          << " already exists, skipping the quantifier"
+                          << std::endl;
             done = true;
             break;
           }
           // Conflict found and added. Marking q as relevant ensures it is
           // checked first on the next round
+          Trace("ccfv") << "[cbqi] conflicting instance added for " << q << ": "
+                        << origSub << std::endl;
           fm->markRelevant(q);
           d_qstate.notifyConflictingInst();
           done = true;
@@ -204,7 +215,7 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
     {
       return;
     }
-    Trace("ccfv-debug") << "  No conflicting instance found for " << q
+    Trace("ccfv-debug") << "[cbqi] no conflicting instance found for " << q
                         << std::endl;
   }
 }
@@ -328,6 +339,7 @@ void CcfvEngine::doInstantiationRound(Theory::Effort effort)
   // while unfinished, try effort level=0,1,2....
   while (!finished && e <= eLimit)
   {
+    Trace("ccfv-debug") << "[tbqi] internal effort level " << e << std::endl;
     finished = true;
     for (const Node& q : d_quants)
     {
@@ -360,14 +372,12 @@ void CcfvEngine::doInstantiationRound(Theory::Effort effort)
 
 void CcfvEngine::checkTriggerInst(Theory::Effort level)
 {
-  Trace("ccfv") << "CcfvEngine: Starting trigger-based instantiation check"
+  Trace("ccfv") << "[tbqi] starting trigger-based instantiation check"
                 << std::endl;
 
   if (d_qstate.isConflictingInst())
   {
-    Trace("ccfv") << "CcfvEngine: Model already conflicted, aborting "
-                     "trigger-based instantiation"
-                  << std::endl;
+    Trace("ccfv") << "[tbqi] model already conflicted, aborting" << std::endl;
     return;
   }
 
@@ -385,7 +395,7 @@ void CcfvEngine::checkTriggerInst(Theory::Effort level)
       d_quants.push_back(q);
     }
   }
-  Trace("ccfv") << "CcfvEngine: " << d_quants.size() << "/" << nquant
+  Trace("ccfv") << "[tbqi] " << d_quants.size() << "/" << nquant
                 << " quantifiers to process" << std::endl;
 
   if (!d_quants.empty())
@@ -408,8 +418,8 @@ uint64_t CcfvEngine::processTrigger(Node q, const CcfvTriggerEntry& tr)
     if (!ee->hasTerm(gt) && !gt.getType().isBoolean())
     {
       Node k = SkolemManager::mkPurifySkolem(gt);
-      Trace("ccfv-debug") << "  Ground term purify lemma: " << k.eqNode(gt)
-                          << std::endl;
+      Trace("ccfv") << "[tbqi] ground term purification lemma: " << k.eqNode(gt)
+                    << std::endl;
       d_qim.addPendingLemma(k.eqNode(gt), InferenceId::QUANTIFIERS_GT_PURIFY);
       addedLemmas++;
     }
@@ -418,7 +428,8 @@ uint64_t CcfvEngine::processTrigger(Node q, const CcfvTriggerEntry& tr)
   const std::vector<Node>& trigger = tr.d_pats;
   std::vector<Node> freeVars(q[0].begin(), q[0].end());
   const ccfv::CcfvIndices& indices = getIndices(ee);
-  Trace("ccfv-debug") << "  Trigger: " << trigger << std::endl;
+  Trace("ccfv-debug") << "[tbqi] processing trigger " << trigger << " of " << q
+                      << std::endl;
 
   size_t triggerSize = trigger.size();
   for (TNode pat : trigger)
@@ -443,29 +454,27 @@ uint64_t CcfvEngine::processTrigger(Node q, const CcfvTriggerEntry& tr)
       L.push_back(trigger[k].eqNode(t));
     }
 
-    Trace("ccfv-debug") << "  Selecting grounded trigger: " << L << std::endl;
+    Trace("ccfv-debug") << "[tbqi] grounded trigger: " << L << std::endl;
     std::vector<std::vector<Node>> substitutions;
-    bool solved = false;
-    {
-      TimerStat::CodeTimer timer(d_stats.d_solveTime);
-      solved = d_solver->solve(options().quantifiers.ccfvMode,
-                               freeVars,
-                               L,
-                               ee,
-                               indices,
-                               substitutions);
-    }
+    bool solved = d_solver->solve(options().quantifiers.ccfvMode,
+                                  freeVars,
+                                  L,
+                                  ee,
+                                  indices,
+                                  substitutions);
     if (solved)
     {
-      Trace("ccfv") << "CcfvEngine: Found " << substitutions.size()
-                    << " substitutions for " << q << std::endl;
+      Trace("ccfv-debug") << "[tbqi] found " << substitutions.size()
+                          << " substitution(s) for " << q << std::endl;
       for (std::vector<Node>& sub : substitutions)
       {
-        Trace("ccfv-debug") << "  Applying instantiation terms: " << freeVars
-                            << " mapsto " << sub << std::endl;
+        Trace("ccfv-debug") << "[tbqi] applying substitution: " << freeVars
+                            << " -> " << sub << std::endl;
         if (qinst->addInstantiation(
                 q, sub, InferenceId::QUANTIFIERS_INST_E_MATCHING))
         {
+          Trace("ccfv") << "[tbqi] instantiation added for " << q << ": " << sub
+                        << std::endl;
           addedLemmas++;
           if (d_qstate.isInConflict())
           {

@@ -192,8 +192,8 @@ void CcfvSatSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
   auto addIfGround = [ee](TNode t) {
     if (!expr::hasFreeVar(t) && !ee->hasTerm(t))
     {
-      Trace("ccfv") << "    CcfvEngine: registering ground term " << t
-                    << " into EE" << std::endl;
+      Trace("ccfv-debug") << "[sat]     registering ground term " << t
+                          << " into EE" << std::endl;
       ee->addTerm(t);
     }
   };
@@ -264,11 +264,11 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
                           eq::EqualityEngine* ee,
                           std::vector<std::vector<Node>>& substitutions)
 {
-  Trace("ccfv") << "  CcfvEngine: solveSat with " << freeVars.size()
-                << " free variables, " << lits.size() << " literals"
-                << std::endl;
-  Trace("ccfv-debug") << "  CcfvEngine: freeVars = " << freeVars << std::endl;
-  Trace("ccfv-debug") << "  CcfvEngine: L = " << lits << std::endl;
+  Trace("ccfv-debug") << "[sat]   solveSat with " << freeVars.size()
+                      << " free variables, " << lits.size() << " literals"
+                      << std::endl;
+  Trace("ccfv-debug") << "[sat]   freeVars = " << freeVars << std::endl;
+  Trace("ccfv-debug") << "[sat]   L = " << lits << std::endl;
 
   // TODO: With --simplifications (which is enabled by default in cvc5), the
   // Equality Engine state changes substantially for some problems. It is good
@@ -287,7 +287,7 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     hoLits.push_back(toHoApply(lit));
   }
 
-  Trace("ccfv-debug") << "  CcfvEngine: L (after normalization) = " << hoLits
+  Trace("ccfv-debug") << "[sat]   L (after normalization) = " << hoLits
                       << std::endl;
 
   if (!isPreprocessed(hoLits))
@@ -302,20 +302,20 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
   ccfv::HoccfvUtils hoccfvUtils(freeVars, hoLits);
 
   // Floater Equivalence
-  Trace("ccfv") << "    CcfvEngine: computing floater equivalences"
-                << std::endl;
+  Trace("ccfv-debug") << "[sat]     computing floater equivalences"
+                      << std::endl;
   hoccfvUtils.computeFloaterEquivalences();
 
   // Ground or Type Constraints for floaters
-  Trace("ccfv")
-      << "    CcfvEngine: solving ground and type constraints for floaters"
+  Trace("ccfv-debug")
+      << "[sat]     solving ground and type constraints for floaters"
       << std::endl;
   hoccfvUtils.applyGroundOrTypeConstraints();
 
   // Cycle Detection
-  Trace("ccfv") << "    CcfvEngine: computing the floater-dependency graph to "
-                   "detect cycle variables"
-                << std::endl;
+  Trace("ccfv-debug") << "[sat]     computing the floater-dependency graph to "
+                         "detect cycle variables"
+                      << std::endl;
   hoccfvUtils.computeFloaterDependencyGraph();
 
   std::map<Node, std::vector<std::pair<Node, Node>>> signatures =
@@ -339,9 +339,9 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     }
   }
 
-  Trace("ccfv") << "    CcfvEngine: " << positiveConstraints.size()
-                << " equalities, " << negativeConstraints.size()
-                << " disequalities" << std::endl;
+  Trace("ccfv-debug") << "[sat]     " << positiveConstraints.size()
+                      << " equalities, " << negativeConstraints.size()
+                      << " disequalities" << std::endl;
 
   d_pNodes.clear();
   d_qNodes.clear();
@@ -382,13 +382,12 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
   }
 
   // Core Encoding
-  Trace("ccfv") << "    CcfvEngine: starting to generate the core encoding"
-                << std::endl;
-  Trace("ccfv") << "    CcfvEngine: encoding negative constraints" << std::endl;
+  Trace("ccfv-debug") << "[sat]     starting to generate the core encoding"
+                      << std::endl;
+  Trace("ccfv-debug") << "[sat]     encoding negative constraints" << std::endl;
   for (TNode negConstraint : negativeConstraints)
   {
-    Trace("ccfv-debug") << "      CcfvEngine: diseq " << negConstraint
-                        << std::endl;
+    Trace("ccfv-debug") << "[sat]       diseq " << negConstraint << std::endl;
     TNode x = (negConstraint[0][0].getKind() == Kind::BOUND_VARIABLE)
                   ? negConstraint[0][0]
                   : negConstraint[0][1];
@@ -433,11 +432,10 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     satClauses.push_back(nm->mkOr(disjuncts));
   }
 
-  Trace("ccfv") << "    CcfvEngine: encoding positive constraints" << std::endl;
+  Trace("ccfv-debug") << "[sat]     encoding positive constraints" << std::endl;
   for (TNode posConstraint : positiveConstraints)
   {
-    Trace("ccfv-debug") << "      CcfvEngine: eq " << posConstraint
-                        << std::endl;
+    Trace("ccfv-debug") << "[sat]       eq " << posConstraint << std::endl;
     TNode l = posConstraint[0], r = posConstraint[1];
     TNode app = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? l : r;
     TNode u0 = (l.getKind() == Kind::HO_APPLY && expr::hasFreeVar(l)) ? r : l,
@@ -601,8 +599,8 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
   }
 
   // Mutual Exclusion
-  Trace("ccfv") << "    CcfvEngine: encoding mutual exclusion constraints"
-                << std::endl;
+  Trace("ccfv-debug") << "[sat]     encoding mutual exclusion constraints"
+                      << std::endl;
   for (TNode var : freeVars)
   {
     std::vector<Node> pVars = {};
@@ -635,19 +633,19 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     }
   }
 
-  Trace("ccfv") << "    CcfvEngine: generated " << satClauses.size()
-                << " SAT clauses" << std::endl;
-  if (TraceIsOn("ccfv"))
+  Trace("ccfv-debug") << "[sat]     generated " << satClauses.size()
+                      << " SAT clauses" << std::endl;
+  if (TraceIsOn("ccfv-debug"))
   {
-    Trace("ccfv") << "=== CCFV SAT ENCODING (" << satClauses.size()
-                  << " clauses) ===" << std::endl;
+    Trace("ccfv-debug") << "[sat] === SAT encoding (" << satClauses.size()
+                        << " clauses) ===" << std::endl;
     for (size_t i = 0; i < satClauses.size(); ++i)
     {
-      Trace("ccfv") << "  [" << i << "] " << satClauses[i] << std::endl;
+      Trace("ccfv-debug") << "  [" << i << "] " << satClauses[i] << std::endl;
     }
-    Trace("ccfv") << "--- FULL FORMULA (AND) ---" << std::endl;
-    Trace("ccfv") << nm->mkAnd(satClauses) << std::endl;
-    Trace("ccfv") << "=========================" << std::endl;
+    Trace("ccfv-debug") << "--- FULL FORMULA (AND) ---" << std::endl;
+    Trace("ccfv-debug") << nm->mkAnd(satClauses) << std::endl;
+    Trace("ccfv-debug") << "=========================" << std::endl;
   }
 
   for (const Node& clause : satClauses)
@@ -655,38 +653,38 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     cnfStream.convertAndAssert(clause, false, false);
   }
 
-  Trace("ccfv") << "    CcfvEngine: invoking SAT solver" << std::endl;
+  Trace("ccfv-debug") << "[sat]     invoking SAT solver" << std::endl;
   prop::SatValue result = satSolver->solve();
-  Trace("ccfv") << "    CcfvEngine: SAT solver returned " << result
-                << std::endl;
+  Trace("ccfv-debug") << "[sat]     SAT solver returned " << result
+                      << std::endl;
   if (result == prop::SAT_VALUE_TRUE)
   {
-    Trace("ccfv") << "    CcfvEngine: SAT solution found" << std::endl;
+    Trace("ccfv-debug") << "[sat]     SAT solution found" << std::endl;
 
-    Trace("ccfv") << std::endl << "=== (E^cc) ===" << std::endl;
+    Trace("ccfv-debug") << std::endl << "[sat] === E^cc ===" << std::endl;
     for (eq::EqClassesIterator eqcs_i(ee); !eqcs_i.isFinished(); ++eqcs_i)
     {
       Node rep = *eqcs_i;
-      Trace("ccfv") << "  Eqc [" << rep << "] : { ";
+      Trace("ccfv-debug") << "  Eqc [" << rep << "] : { ";
       for (eq::EqClassIterator eqc_i(rep, ee); !eqc_i.isFinished(); ++eqc_i)
       {
-        Trace("ccfv") << *eqc_i << " ";
+        Trace("ccfv-debug") << *eqc_i << " ";
       }
-      Trace("ccfv") << "}" << std::endl;
+      Trace("ccfv-debug") << "}" << std::endl;
       auto sigIt = signatures.find(rep);
       if (sigIt != signatures.end() && !sigIt->second.empty())
       {
-        Trace("ccfv") << "    Signatures: ";
+        Trace("ccfv-debug") << "    Signatures: ";
         for (const auto& [rep1, rep2] : sigIt->second)
         {
-          Trace("ccfv") << "([" << rep1 << "], [" << rep2 << "]) ";
+          Trace("ccfv-debug") << "([" << rep1 << "], [" << rep2 << "]) ";
         }
-        Trace("ccfv") << std::endl;
+        Trace("ccfv-debug") << std::endl;
       }
     }
-    Trace("ccfv") << "===============================" << std::endl;
+    Trace("ccfv-debug") << "===============================" << std::endl;
 
-    Trace("ccfv") << std::endl << "=== Model ===" << std::endl;
+    Trace("ccfv-debug") << std::endl << "[sat] === model ===" << std::endl;
     for (const auto& [var, qNode] : d_qNodes)
     {
       if (cnfStream.hasLiteral(qNode))
@@ -694,8 +692,8 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
         prop::SatLiteral lit = cnfStream.getLiteral(qNode);
         if (satSolver->modelValue(lit) == prop::SAT_VALUE_TRUE)
         {
-          Trace("ccfv") << "  " << qNode << " = TRUE  (variable " << var
-                        << " is a FLOATER)" << std::endl;
+          Trace("ccfv-debug") << "  " << qNode << " = TRUE  (variable " << var
+                              << " is a FLOATER)" << std::endl;
         }
       }
     }
@@ -706,12 +704,12 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
         prop::SatLiteral lit = cnfStream.getLiteral(pNode);
         if (satSolver->modelValue(lit) == prop::SAT_VALUE_TRUE)
         {
-          Trace("ccfv") << "  " << pNode << " = TRUE  (" << key.first << " -> ["
-                        << key.second << "])" << std::endl;
+          Trace("ccfv-debug") << "  " << pNode << " = TRUE  (" << key.first
+                              << " -> [" << key.second << "])" << std::endl;
         }
       }
     }
-    Trace("ccfv") << "=================" << std::endl << std::endl;
+    Trace("ccfv-debug") << "=================" << std::endl << std::endl;
 
     // Reconstructing the substitution
     std::vector<Node> sub(freeVars.begin(), freeVars.end());
@@ -830,8 +828,8 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     return true;
   }
 
-  Trace("ccfv") << "    CcfvEngine: SAT returned unsat, no solution"
-                << std::endl;
+  Trace("ccfv-debug") << "[sat]     SAT returned unsat, no solution"
+                      << std::endl;
   return false;
 }
 
