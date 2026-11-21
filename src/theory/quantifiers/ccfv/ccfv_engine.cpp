@@ -87,8 +87,12 @@ bool CcfvEngine::solveTimed(Statistics::Technique& t,
   bool solved;
   {
     TimerStat::CodeTimer timer(d_stats.d_searchTime);
-    solved = d_solver->solve(
-        options().quantifiers.ccfvMode, freeVars, lits, ee, indices, substitutions);
+    solved = d_solver->solve(options().quantifiers.ccfvMode,
+                             freeVars,
+                             lits,
+                             ee,
+                             indices,
+                             substitutions);
   }
   uint64_t nodes = d_solver->getLastNodeCount();
   ++t.d_solveCalls;
@@ -136,8 +140,15 @@ const ccfv::CcfvIndices& CcfvEngine::getIndices(eq::EqualityEngine* ee)
 
 bool CcfvEngine::needsCheck(Theory::Effort level)
 {
-  // Run when quantifier-free theories have reached a consistent assignment
-  return d_qstate.getInstWhenNeedsCheck(level);
+  // CBQI follows QuantConflictFind: every full effort
+  bool cbqi = !options().quantifiers.ccfvNoCbqi && !d_qstate.isConflictingInst()
+              && level == Theory::EFFORT_FULL;
+
+  // TBQI follows InstantiationEngine
+  bool tbqi = !options().quantifiers.ccfvNoTbqi
+              && d_qstate.getInstWhenNeedsCheck(level);
+
+  return cbqi || tbqi;
 }
 
 void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
@@ -159,7 +170,8 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
       endRound(d_stats.d_cbqi);
     }
   }
-  else if (quant_e == QEFFORT_STANDARD && !options().quantifiers.ccfvNoTbqi)
+  else if (quant_e == QEFFORT_STANDARD && !options().quantifiers.ccfvNoTbqi
+           && d_qstate.getInstWhenNeedsCheck(level))
   {
     // the whole check is timed, as the instantiation engine does
     TimerStat::CodeTimer timer(d_stats.d_tbqiTime);
