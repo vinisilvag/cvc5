@@ -25,7 +25,31 @@ namespace cvc5::internal {
 namespace theory {
 namespace quantifiers {
 
-CcfvBacktrackingSolver::CcfvBacktrackingSolver(Env& env) : EnvObj(env) {}
+CcfvBacktrackingSolver::Statistics::Statistics(StatisticsRegistry& sr)
+    : d_solutions(sr.registerInt("ccfv::solver::solutions")),
+      d_maxDepth(sr.registerInt("ccfv::solver::maxDepth")),
+      d_leafDepth(sr.registerAverage("ccfv::solver::leafDepth")),
+      d_failUnsupported(sr.registerInt("ccfv::solver::failUnsupported")),
+      d_failNoCandidates(sr.registerInt("ccfv::solver::failNoCandidates")),
+      d_failGroundEq(sr.registerInt("ccfv::solver::failGroundEq")),
+      d_failDiseq(sr.registerInt("ccfv::solver::failDiseq")),
+      d_failNotInEe(sr.registerInt("ccfv::solver::failNotInEe"))
+{
+}
+
+CcfvBacktrackingSolver::CcfvBacktrackingSolver(Env& env)
+    : EnvObj(env), d_stats(statisticsRegistry())
+{
+}
+
+std::vector<std::vector<Node>> CcfvBacktrackingSolver::fail(size_t depth,
+                                                            IntStat& reason)
+{
+  ++reason;
+  d_stats.d_leafDepth << static_cast<double>(depth);
+  d_stats.d_maxDepth.maxAssign(depth);
+  return {};
+}
 
 Node CcfvBacktrackingSolver::normalizePredicate(TNode lit)
 {
@@ -246,10 +270,15 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
     std::vector<Node> lits,
     eq::EqualityEngine* ee,
     const ccfv::CcfvIndices& indices,
-    std::vector<Node> currentSubstitution)
+    std::vector<Node> currentSubstitution,
+    size_t depth)
 {
+  ++d_lastNodes;
   if (lits.empty())
   {
+    ++d_stats.d_solutions;
+    d_stats.d_leafDepth << static_cast<double>(depth);
+    d_stats.d_maxDepth.maxAssign(depth);
     return {currentSubstitution};
   }
 
@@ -281,7 +310,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
                             << " = " << r << ")" << std::endl;
         Trace("ccfv-debug")
             << "[backtracking]     removing from C" << std::endl;
-        return solveRec(freeVars, newLits, ee, indices, currentSubstitution);
+        return solveRec(freeVars, newLits, ee, indices, currentSubstitution, depth + 1);
       }
 
       // Ground equality
@@ -299,9 +328,9 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
                 << "[backtracking]       they are equal, removing from C"
                 << std::endl;
             return solveRec(
-                freeVars, newLits, ee, indices, currentSubstitution);
+                freeVars, newLits, ee, indices, currentSubstitution, depth + 1);
           }
-          return {};
+          return fail(depth, d_stats.d_failGroundEq);
         }
         else if (l.hasOperator() && r.hasOperator()
                  && l.getOperator() == r.getOperator()
@@ -316,7 +345,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
                                 << l[i].eqNode(r[i]) << "to C" << std::endl;
             newLits.push_back(l[i].eqNode(r[i]));
           }
-          return solveRec(freeVars, newLits, ee, indices, currentSubstitution);
+          return solveRec(freeVars, newLits, ee, indices, currentSubstitution, depth + 1);
         }
       }
 
@@ -347,7 +376,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
           {
             lit = lit.substitute(TNode(variable), TNode(term));
           }
-          return solveRec(freeVars, newLits, ee, indices, currentSubstitution);
+          return solveRec(freeVars, newLits, ee, indices, currentSubstitution, depth + 1);
         }
         else
         {
@@ -357,7 +386,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
             Trace("ccfv-debug")
                 << "[backtracking]       Uvar (" << variable << " occurs in "
                 << term << " with op = " << op << ")" << std::endl;
-            for (const Node& t : indices.getReps(op))
+            const auto& cands = indices.getReps(op);
+            if (cands.empty())
+            {
+              return fail(depth, d_stats.d_failNoCandidates);
+            }
+            for (const Node& t : cands)
             {
               Trace("ccfv-debug")
                   << "[backtracking]       adding " << term.eqNode(t) << " and "
@@ -366,7 +400,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
               branchLits.push_back(term.eqNode(t));
               branchLits.push_back(variable.eqNode(t));
               std::vector<std::vector<Node>> branchSols = solveRec(
-                  freeVars, branchLits, ee, indices, currentSubstitution);
+                  freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
               sols.insert(sols.end(), branchSols.begin(), branchSols.end());
             }
           }
@@ -392,7 +426,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         Trace("ccfv-debug")
             << "[backtracking]       E-Matching all UF terms with op = " << op
             << " in the equivalence class of " << t << std::endl;
-        for (const Node& app : indices.getApps(op, t))
+        const auto& cands = indices.getApps(op, t);
+        if (cands.empty())
+        {
+          return fail(depth, d_stats.d_failNoCandidates);
+        }
+        for (const Node& app : cands)
         {
           Assert(fTerm.getNumChildren() == app.getNumChildren());
 
@@ -408,7 +447,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
             branchLits.push_back(fTerm[i].eqNode(app[i]));
           }
           std::vector<std::vector<Node>> branchSols =
-              solveRec(freeVars, branchLits, ee, indices, currentSubstitution);
+              solveRec(freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
           sols.insert(sols.end(), branchSols.begin(), branchSols.end());
         }
 
@@ -437,11 +476,16 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
             branchLits.push_back(l[i].eqNode(r[i]));
           }
           std::vector<std::vector<Node>> branchSols =
-              solveRec(freeVars, branchLits, ee, indices, currentSubstitution);
+              solveRec(freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
           sols.insert(sols.end(), branchSols.begin(), branchSols.end());
         }
 
-        for (const Node& t : indices.getReps(l.getOperator()))
+        const auto& cands = indices.getReps(l.getOperator());
+        if (cands.empty() && l.getOperator() != r.getOperator())
+        {
+          return fail(depth, d_stats.d_failNoCandidates);
+        }
+        for (const Node& t : cands)
         {
           std::vector<Node> branchLits = newLits;
           Trace("ccfv-debug")
@@ -452,18 +496,24 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
           branchLits.push_back(l.eqNode(t));
           branchLits.push_back(r.eqNode(t));
           std::vector<std::vector<Node>> branchSols =
-              solveRec(freeVars, branchLits, ee, indices, currentSubstitution);
+              solveRec(freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
           sols.insert(sols.end(), branchSols.begin(), branchSols.end());
         }
 
         return sols;
       }
 
-      break;
+      // No rule applies
+      return fail(depth,
+                  lIsGround && rIsGround ? d_stats.d_failNotInEe
+                                         : d_stats.d_failUnsupported);
     }
     case Kind::NOT:
     {
-      if (c[0].getKind() != Kind::EQUAL) return {};
+      if (c[0].getKind() != Kind::EQUAL)
+      {
+        return fail(depth, d_stats.d_failUnsupported);
+      }
 
       Node eq = c[0];
       Node l = eq[0], r = eq[1];
@@ -472,7 +522,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
       {
         Trace("ccfv-debug") << "[backtracking]     syntactic disequality (" << l
                             << " != " << r << "), failing branch" << std::endl;
-        return {};
+        return fail(depth, d_stats.d_failDiseq);
       }
 
       // Ground disequality
@@ -489,12 +539,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
             Trace("ccfv-debug")
                 << "[backtracking]       they are not disequal, failing branch"
                 << std::endl;
-            return {};
+            return fail(depth, d_stats.d_failDiseq);
           }
           Trace("ccfv-debug")
               << "[backtracking]       they are disequal, removing from C"
               << std::endl;
-          return solveRec(freeVars, newLits, ee, indices, currentSubstitution);
+          return solveRec(freeVars, newLits, ee, indices, currentSubstitution, depth + 1);
         }
       }
 
@@ -511,7 +561,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
             << "[backtracking]     assignment into a disequal term ("
             << variable << " != " << term << ")" << std::endl;
 
-        for (const Node& t : indices.getDiseqs(term))
+        const auto& cands = indices.getDiseqs(term);
+        if (cands.empty())
+        {
+          return fail(depth, d_stats.d_failNoCandidates);
+        }
+        for (const Node& t : cands)
         {
           Trace("ccfv-debug") << "[backtracking]       assigning " << variable
                               << " to disequal rep " << t << " ("
@@ -519,7 +574,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(variable.eqNode(t));
           std::vector<std::vector<Node>> branchSols =
-              solveRec(freeVars, branchLits, ee, indices, currentSubstitution);
+              solveRec(freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
           sols.insert(sols.end(), branchSols.begin(), branchSols.end());
         }
 
@@ -540,7 +595,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
                "term ("
             << fTerm << " != " << t << ")" << std::endl;
 
-        for (const Node& tt : indices.getDiseqs(t))
+        const auto& cands = indices.getDiseqs(t);
+        if (cands.empty())
+        {
+          return fail(depth, d_stats.d_failNoCandidates);
+        }
+        for (const Node& tt : cands)
         {
           Trace("ccfv-debug") << "[backtracking]       E-Matching " << fTerm
                               << " with disequal rep " << tt << " and adding "
@@ -548,7 +608,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
           std::vector<Node> branchLits = newLits;
           branchLits.push_back(fTerm.eqNode(tt));
           std::vector<std::vector<Node>> branchSols =
-              solveRec(freeVars, branchLits, ee, indices, currentSubstitution);
+              solveRec(freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
           sols.insert(sols.end(), branchSols.begin(), branchSols.end());
         }
 
@@ -566,7 +626,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         Trace("ccfv-debug") << "[backtracking]     DFapp (" << variable
                             << " != " << term << ")" << std::endl;
 
-        for (const Node& t : indices.getReps(term.getOperator()))
+        const auto& cands = indices.getReps(term.getOperator());
+        if (cands.empty())
+        {
+          return fail(depth, d_stats.d_failNoCandidates);
+        }
+        for (const Node& t : cands)
         {
           Trace("ccfv-debug")
               << "[backtracking]       adding " << term.eqNode(t) << " and "
@@ -575,7 +640,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
           branchLits.push_back(term.eqNode(t));
           branchLits.push_back(variable.eqNode(t).negate());
           std::vector<std::vector<Node>> branchSols =
-              solveRec(freeVars, branchLits, ee, indices, currentSubstitution);
+              solveRec(freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
           sols.insert(sols.end(), branchSols.begin(), branchSols.end());
         }
 
@@ -589,7 +654,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         Trace("ccfv-debug")
             << "[backtracking]     E-Matching into disequal terms (" << l
             << " != " << r << ")" << std::endl;
-        for (const Node& t : indices.getReps(l.getOperator()))
+        const auto& cands = indices.getReps(l.getOperator());
+        if (cands.empty())
+        {
+          return fail(depth, d_stats.d_failNoCandidates);
+        }
+        for (const Node& t : cands)
         {
           Trace("ccfv-debug")
               << "[backtracking]       adding " << l.eqNode(t) << " and "
@@ -598,7 +668,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
           branchLits.push_back(l.eqNode(t));
           branchLits.push_back(r.eqNode(t).negate());
           std::vector<std::vector<Node>> branchSols =
-              solveRec(freeVars, branchLits, ee, indices, currentSubstitution);
+              solveRec(freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
           sols.insert(sols.end(), branchSols.begin(), branchSols.end());
         }
 
@@ -613,7 +683,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         Trace("ccfv-debug") << "[backtracking]     DVar (" << l << " != " << r
                             << ")" << std::endl;
 
-        for (TNode rep : indices.getRepsOfType(l.getType()))
+        const auto& cands = indices.getRepsOfType(l.getType());
+        if (cands.empty())
+        {
+          return fail(depth, d_stats.d_failNoCandidates);
+        }
+        for (TNode rep : cands)
         {
           for (const Node& t : indices.getDiseqs(rep))
           {
@@ -624,7 +699,7 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
             branchLits.push_back(l.eqNode(rep));
             branchLits.push_back(r.eqNode(t));
             std::vector<std::vector<Node>> branchSols = solveRec(
-                freeVars, branchLits, ee, indices, currentSubstitution);
+                freeVars, branchLits, ee, indices, currentSubstitution, depth + 1);
             sols.insert(sols.end(), branchSols.begin(), branchSols.end());
           }
         }
@@ -632,9 +707,12 @@ std::vector<std::vector<Node>> CcfvBacktrackingSolver::solveRec(
         return sols;
       }
 
-      break;
+      // No rule applies
+      return fail(depth,
+                  lIsGround && rIsGround ? d_stats.d_failNotInEe
+                                         : d_stats.d_failUnsupported);
     }
-    default: return {};
+    default: return fail(depth, d_stats.d_failUnsupported);
   }
 
   return sols;
@@ -657,8 +735,13 @@ bool CcfvBacktrackingSolver::solve(
   }
 
   std::vector<Node> currentSubstitution(freeVars.begin(), freeVars.end());
-  substitutions = solveRec(
-      freeVars, std::move(normalizedLits), ee, indices, currentSubstitution);
+  d_lastNodes = 0;
+  substitutions = solveRec(freeVars,
+                           std::move(normalizedLits),
+                           ee,
+                           indices,
+                           currentSubstitution,
+                           0);
 
   // If any free variable is left
   for (std::vector<Node>& sub : substitutions)

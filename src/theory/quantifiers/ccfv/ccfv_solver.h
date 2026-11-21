@@ -70,11 +70,16 @@ class CcfvSolver : protected EnvObj
              const ccfv::CcfvIndices& indices,
              std::vector<std::vector<Node>>& substitutions);
 
+  /** Search nodes of the last call to solve (0 in SAT mode). */
+  uint64_t getLastNodeCount() const { return d_lastNodes; }
+
  private:
-  /** Backtracking CCFV solver (decision mode). */
+  uint64_t d_lastNodes = 0;
+
+  /** Backtracking CCFV solver. */
   CcfvBacktrackingSolver d_backtrackingSolver;
 
-  /** SAT-encoded CCFV solver (sat mode). */
+  /** SAT-encoded CCFV solver. */
   CcfvSatSolver d_satSolver;
 };
 

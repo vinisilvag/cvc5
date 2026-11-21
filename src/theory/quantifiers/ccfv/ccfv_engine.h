@@ -82,8 +82,55 @@ class CcfvEngine : public QuantifiersModule
     /** Number of quantified formulas skipped because their CNF would exceed
      * the literal limit. */
     IntStat d_cnfLimitExceeded;
+    /** Time building CcfvIndices (nested in the cbqi/tbqi times). */
+    TimerStat d_indicesTime;
+    /** Number of times CcfvIndices were built. */
+    IntStat d_indicesBuilds;
+    /** Time inside the CCFV solver (nested in the cbqi/tbqi times). The
+     * lazily computed disequality lists are accounted here. */
+    TimerStat d_searchTime;
+
+    /** Counters of one technique (CBQI or TBQI). */
+    struct Technique
+    {
+      Technique(StatisticsRegistry& sr, const std::string& prefix);
+      /** Calls of check. */
+      IntStat d_checks;
+      /** Calls with at least one solver call (rounds that did search). */
+      IntStat d_roundsWithSolve;
+      /** Solver calls: clauses for CBQI, grounded triggers for TBQI. */
+      IntStat d_solveCalls;
+      /** Solver calls that returned at least one substitution. */
+      IntStat d_solveSolved;
+      /** Instantiations accepted by Instantiate::addInstantiation. */
+      IntStat d_instsAdded;
+      /** Instantiations rejected by Instantiate::addInstantiation. */
+      IntStat d_instsRejected;
+      /** Search nodes explored (decision mode). */
+      IntStat d_nodes;
+      /** Search nodes per solver call. */
+      AverageStat d_nodesPerSolve;
+      /** Search nodes per round with at least one solver call. */
+      AverageStat d_nodesPerRound;
+    };
+    Technique d_cbqi;
+    Technique d_tbqi;
   };
   Statistics d_stats;
+
+  /** Search nodes and solver calls of the round in progress. */
+  uint64_t d_roundNodes = 0;
+  uint64_t d_roundSolves = 0;
+  /** Calls the solver, accounting search time, nodes and solver calls. */
+  bool solveTimed(Statistics::Technique& t,
+                  const std::vector<Node>& freeVars,
+                  const std::vector<Node>& lits,
+                  eq::EqualityEngine* ee,
+                  const ccfv::CcfvIndices& indices,
+                  std::vector<std::vector<Node>>& substitutions);
+  /** Starts/ends the accounting of a check of technique t. */
+  void beginRound(Statistics::Technique& t);
+  void endRound(Statistics::Technique& t);
 
   std::unordered_map<Node, std::vector<std::vector<Node>>> d_quantCnf;
   /** The quantified formulas processed in the current trigger check. */

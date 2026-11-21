@@ -44,10 +44,12 @@ bool CcfvSolver::solve(options::CcfvMode mode,
   {
     solved =
         d_backtrackingSolver.solve(freeVars, lits, ee, indices, substitutions);
+    d_lastNodes = d_backtrackingSolver.getLastNodeCount();
   }
   else if (mode == options::CcfvMode::SAT)
   {
     solved = d_satSolver.solve(freeVars, lits, ee, substitutions);
+    d_lastNodes = 0;
   }
 
   Trace("ccfv") << "[solver] "

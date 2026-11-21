@@ -38,8 +38,69 @@ namespace quantifiers {
 CcfvEngine::Statistics::Statistics(StatisticsRegistry& sr)
     : d_cbqiTime(sr.registerTimer("ccfv::cbqiTime")),
       d_tbqiTime(sr.registerTimer("ccfv::tbqiTime")),
-      d_cnfLimitExceeded(sr.registerInt("ccfv::cnfLimitExceeded"))
+      d_cnfLimitExceeded(sr.registerInt("ccfv::cnfLimitExceeded")),
+      d_indicesTime(sr.registerTimer("ccfv::indicesTime")),
+      d_indicesBuilds(sr.registerInt("ccfv::indicesBuilds")),
+      d_searchTime(sr.registerTimer("ccfv::searchTime")),
+      d_cbqi(sr, "ccfv::cbqi::"),
+      d_tbqi(sr, "ccfv::tbqi::")
 {
+}
+
+CcfvEngine::Statistics::Technique::Technique(StatisticsRegistry& sr,
+                                             const std::string& p)
+    : d_checks(sr.registerInt(p + "checks")),
+      d_roundsWithSolve(sr.registerInt(p + "roundsWithSolve")),
+      d_solveCalls(sr.registerInt(p + "solveCalls")),
+      d_solveSolved(sr.registerInt(p + "solveSolved")),
+      d_instsAdded(sr.registerInt(p + "instsAdded")),
+      d_instsRejected(sr.registerInt(p + "instsRejected")),
+      d_nodes(sr.registerInt(p + "nodes")),
+      d_nodesPerSolve(sr.registerAverage(p + "nodesPerSolve")),
+      d_nodesPerRound(sr.registerAverage(p + "nodesPerRound"))
+{
+}
+
+void CcfvEngine::beginRound(Statistics::Technique& t)
+{
+  ++t.d_checks;
+  d_roundNodes = 0;
+  d_roundSolves = 0;
+}
+
+void CcfvEngine::endRound(Statistics::Technique& t)
+{
+  if (d_roundSolves > 0)
+  {
+    ++t.d_roundsWithSolve;
+    t.d_nodesPerRound << static_cast<double>(d_roundNodes);
+  }
+}
+
+bool CcfvEngine::solveTimed(Statistics::Technique& t,
+                            const std::vector<Node>& freeVars,
+                            const std::vector<Node>& lits,
+                            eq::EqualityEngine* ee,
+                            const ccfv::CcfvIndices& indices,
+                            std::vector<std::vector<Node>>& substitutions)
+{
+  bool solved;
+  {
+    TimerStat::CodeTimer timer(d_stats.d_searchTime);
+    solved = d_solver->solve(
+        options().quantifiers.ccfvMode, freeVars, lits, ee, indices, substitutions);
+  }
+  uint64_t nodes = d_solver->getLastNodeCount();
+  ++t.d_solveCalls;
+  if (solved)
+  {
+    ++t.d_solveSolved;
+  }
+  t.d_nodes += nodes;
+  t.d_nodesPerSolve << static_cast<double>(nodes);
+  d_roundNodes += nodes;
+  ++d_roundSolves;
+  return solved;
 }
 
 CcfvEngine::CcfvEngine(Env& env,
@@ -60,6 +121,8 @@ const ccfv::CcfvIndices& CcfvEngine::getIndices(eq::EqualityEngine* ee)
 {
   if (!d_indices)
   {
+    TimerStat::CodeTimer timer(d_stats.d_indicesTime);
+    ++d_stats.d_indicesBuilds;
     // Only terms the TermDb considers relevant are indexed (all of them with
     // --term-db-mode=all)
     // It is close to the "relevancy" terms defined in the paper that
@@ -91,14 +154,18 @@ void CcfvEngine::check(Theory::Effort level, QEffort quant_e)
     {
       // the whole check is timed, as QuantConflictFind does
       TimerStat::CodeTimer timer(d_stats.d_cbqiTime);
+      beginRound(d_stats.d_cbqi);
       checkConflictInst(level);
+      endRound(d_stats.d_cbqi);
     }
   }
   else if (quant_e == QEFFORT_STANDARD && !options().quantifiers.ccfvNoTbqi)
   {
     // the whole check is timed, as the instantiation engine does
     TimerStat::CodeTimer timer(d_stats.d_tbqiTime);
+    beginRound(d_stats.d_tbqi);
     checkTriggerInst(level);
+    endRound(d_stats.d_tbqi);
   }
 }
 
@@ -178,12 +245,8 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
       }
 
       std::vector<std::vector<Node>> substitutions;
-      bool solved = d_solver->solve(options().quantifiers.ccfvMode,
-                                    freeVars,
-                                    L,
-                                    ee,
-                                    getIndices(ee),
-                                    substitutions);
+      bool solved = solveTimed(
+          d_stats.d_cbqi, freeVars, L, ee, getIndices(ee), substitutions);
       if (solved)
       {
         Trace("ccfv-debug")
@@ -200,6 +263,7 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
           if (!qinst->addInstantiation(
                   q, origSub, InferenceId::QUANTIFIERS_INST_CBQI_CONFLICT))
           {
+            ++d_stats.d_cbqi.d_instsRejected;
             // The instance was already added (duplicate): stop with this
             // quantified formula to avoid exponential behavior
             Trace("ccfv") << "[cbqi] instance for " << q
@@ -208,6 +272,7 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
             done = true;
             break;
           }
+          ++d_stats.d_cbqi.d_instsAdded;
           // Conflict found and added. Marking q as relevant ensures it is
           // checked first on the next round
           Trace("ccfv") << "[cbqi] conflicting instance added for " << q << ": "
@@ -484,12 +549,8 @@ uint64_t CcfvEngine::processTrigger(Node q, const CcfvTriggerEntry& tr)
 
     Trace("ccfv-debug") << "[tbqi] grounded trigger: " << L << std::endl;
     std::vector<std::vector<Node>> substitutions;
-    bool solved = d_solver->solve(options().quantifiers.ccfvMode,
-                                  freeVars,
-                                  L,
-                                  ee,
-                                  indices,
-                                  substitutions);
+    bool solved =
+        solveTimed(d_stats.d_tbqi, freeVars, L, ee, indices, substitutions);
     if (solved)
     {
       Trace("ccfv-debug") << "[tbqi] found " << substitutions.size()
@@ -498,9 +559,14 @@ uint64_t CcfvEngine::processTrigger(Node q, const CcfvTriggerEntry& tr)
       {
         Trace("ccfv-debug") << "[tbqi] applying substitution: " << freeVars
                             << " |-> " << sub << std::endl;
-        if (qinst->addInstantiation(
+        if (!qinst->addInstantiation(
                 q, sub, InferenceId::QUANTIFIERS_INST_E_MATCHING))
         {
+          ++d_stats.d_tbqi.d_instsRejected;
+        }
+        else
+        {
+          ++d_stats.d_tbqi.d_instsAdded;
           Trace("ccfv") << "[tbqi] instantiation added for " << q << ": " << sub
                         << std::endl;
           addedLemmas++;
