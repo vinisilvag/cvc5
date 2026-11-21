@@ -14,6 +14,7 @@
 #ifndef CVC5__THEORY__QUANTIFIERS__CCFV_INDICES_H
 #define CVC5__THEORY__QUANTIFIERS__CCFV_INDICES_H
 
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -39,7 +40,10 @@ using NodePairHash =
 class CcfvIndices
 {
  public:
-  CcfvIndices(eq::EqualityEngine* ee);
+  // isRelevant (optional): ground terms for which it returns false are not
+  // indexed (as TermDb does); by default every term of the EE is indexed
+  CcfvIndices(eq::EqualityEngine* ee,
+              const std::function<bool(TNode)>& isRelevant = nullptr);
   const std::vector<Node>& getDiseqs(TNode t) const;
   const std::vector<Node>& getReps(TNode f) const;
   const std::vector<Node>& getRepsOfType(TypeNode tn) const;

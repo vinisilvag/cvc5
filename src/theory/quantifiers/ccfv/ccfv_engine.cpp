@@ -27,6 +27,7 @@
 #include "theory/quantifiers/quantifiers_attributes.h"
 #include "theory/quantifiers/quantifiers_registry.h"
 #include "theory/quantifiers/quantifiers_state.h"
+#include "theory/quantifiers/term_database.h"
 #include "theory/quantifiers/term_registry.h"
 #include "theory/uf/equality_engine.h"
 
@@ -57,7 +58,16 @@ CcfvEngine::~CcfvEngine() = default;
 
 const ccfv::CcfvIndices& CcfvEngine::getIndices(eq::EqualityEngine* ee)
 {
-  if (!d_indices) d_indices = std::make_unique<ccfv::CcfvIndices>(ee);
+  if (!d_indices)
+  {
+    // Only terms the TermDb considers relevant are indexed (all of them with
+    // --term-db-mode=all)
+    // It is close to the "relevancy" terms defined in the paper that
+    // introduced CCFV
+    TermDb* tdb = d_treg.getTermDatabase();
+    d_indices = std::make_unique<ccfv::CcfvIndices>(
+        ee, [tdb](TNode n) { return tdb->hasTermCurrent(n); });
+  }
   return *d_indices;
 }
 
