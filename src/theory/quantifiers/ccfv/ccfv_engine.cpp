@@ -120,6 +120,8 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
 
   Trace("ccfv") << "[cbqi] " << nquant << " asserted quantifiers" << std::endl;
 
+  // Set when --cbqi-all-conflict is on and some instance was added
+  bool anyConflict = false;
   for (size_t i = 0; i < nquant; ++i)
   {
     TNode q = fm->getAssertedQuantifier(i, true);
@@ -190,7 +192,7 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
         for (std::vector<Node>& sub : substitutions)
         {
           Trace("ccfv-debug") << "[cbqi] applying substitution: " << freeVars
-                              << " -> " << sub << std::endl;
+                              << " |-> " << sub << std::endl;
 
           // Workaround to avoid different free variables count after prenexing
           std::vector<Node> origSub(sub.begin(),
@@ -211,7 +213,16 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
           Trace("ccfv") << "[cbqi] conflicting instance added for " << q << ": "
                         << origSub << std::endl;
           fm->markRelevant(q);
-          d_qstate.notifyConflictingInst();
+          if (options().quantifiers.cbqiAllConflict)
+          {
+            // As QuantConflictFind: keep checking the other quantified
+            // formulas and notify once at the end
+            anyConflict = true;
+          }
+          else
+          {
+            d_qstate.notifyConflictingInst();
+          }
           done = true;
           break;
         }
@@ -225,8 +236,15 @@ void CcfvEngine::checkConflictInst(CVC5_UNUSED Theory::Effort level)
     {
       return;
     }
-    Trace("ccfv-debug") << "[cbqi] no conflicting instance found for " << q
-                        << std::endl;
+    if (!done)
+    {
+      Trace("ccfv-debug") << "[cbqi] no conflicting instance found for " << q
+                          << std::endl;
+    }
+  }
+  if (anyConflict)
+  {
+    d_qstate.notifyConflictingInst();
   }
 }
 
@@ -479,7 +497,7 @@ uint64_t CcfvEngine::processTrigger(Node q, const CcfvTriggerEntry& tr)
       for (std::vector<Node>& sub : substitutions)
       {
         Trace("ccfv-debug") << "[tbqi] applying substitution: " << freeVars
-                            << " -> " << sub << std::endl;
+                            << " |-> " << sub << std::endl;
         if (qinst->addInstantiation(
                 q, sub, InferenceId::QUANTIFIERS_INST_E_MATCHING))
         {
