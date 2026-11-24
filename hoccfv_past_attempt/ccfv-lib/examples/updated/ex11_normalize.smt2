@@ -14,6 +14,7 @@
 (assert (= (f a) (fp ap)))
 (assert (= f fpp))
 
+; L = {u = v f'', u = v f, u = v w, x = w z, x = f' z', (f a) = w z, (f' a') = f' z'}
 (assert (forall ((u U) (v (-> (-> U U) U)) (w (-> U U)) (x U) (z U) (zp U))
   (or (not (= u (v fpp)))
       (not (= u (v f)))
