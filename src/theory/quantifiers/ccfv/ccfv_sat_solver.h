@@ -52,12 +52,43 @@ class CcfvSatSolver : protected EnvObj
              std::vector<std::vector<Node>>& substitutions);
 
  private:
-  bool isPreprocessed(const std::vector<Node>& lits);
+  bool isPreprocessed(const std::vector<Node>& lits, eq::EqualityEngine* ee);
 
-  Node getPVar(TNode x, TNode rep);
-  Node getQVar(TNode x);
+  bool normalize(std::vector<Node>& lits, eq::EqualityEngine* ee);
+  bool flatten(std::vector<Node>& lits);
+  bool removeGroundLiterals(std::vector<Node>& lits);
+  bool removeTrivialAssignments(std::vector<Node>& lits);
+
+  void preprocess(std::vector<Node>& lits, eq::EqualityEngine* ee);
+
   std::map<std::pair<Node, Node>, Node> d_pNodes;
   std::map<Node, Node> d_qNodes;
+  Node getPVar(TNode x, TNode rep)
+  {
+    auto it = d_pNodes.find({x, rep});
+    if (it != d_pNodes.end())
+    {
+      return it->second;
+    }
+    NodeManager* nm = nodeManager();
+    Node v = nm->mkDummySkolem("P_" + x.toString() + "_" + rep.toString(),
+                               nm->booleanType());
+    d_pNodes[{x, rep}] = v;
+    return v;
+  }
+
+  Node getQVar(TNode x)
+  {
+    auto it = d_qNodes.find(x);
+    if (it != d_qNodes.end())
+    {
+      return it->second;
+    }
+    NodeManager* nm = nodeManager();
+    Node v = nm->mkDummySkolem("Q_" + x.toString(), nm->booleanType());
+    d_qNodes[x] = v;
+    return v;
+  }
 
   void registerGroundTermsFromL(const std::vector<Node>& lits,
                                 eq::EqualityEngine* ee);

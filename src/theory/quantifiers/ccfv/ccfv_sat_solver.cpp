@@ -37,7 +37,7 @@ CcfvSatSolver::CcfvSatSolver(Env& env) : EnvObj(env) {}
 
 Node toHoApply(TNode n)
 {
-  if (n.getNumChildren() == 0)
+  if (n.getNumChildren() == 0 || !expr::hasBoundVar(n))
   {
     return n;
   }
@@ -74,7 +74,8 @@ Node toHoApply(TNode n)
   return nm->mkNode(n.getKind(), children);
 }
 
-bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits)
+bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits,
+                                   eq::EqualityEngine* ee)
 {
   for (TNode eq : lits)
   {
@@ -104,6 +105,24 @@ bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits)
           return false;
         }
 
+        if (!expr::hasBoundVar(u0)
+            && (!ee->hasTerm(u0) || ee->getRepresentative(u0) != u0))
+        {
+          return false;
+        }
+
+        if (!expr::hasBoundVar(u1)
+            && (!ee->hasTerm(u1) || ee->getRepresentative(u1) != u1))
+        {
+          return false;
+        }
+
+        if (!expr::hasBoundVar(u2)
+            && (!ee->hasTerm(u2) || ee->getRepresentative(u2) != u2))
+        {
+          return false;
+        }
+
         if ((u0.getKind() != Kind::BOUND_VARIABLE && expr::hasBoundVar(u0))
             || (u1.getKind() != Kind::BOUND_VARIABLE && expr::hasBoundVar(u1))
             || (u2.getKind() != Kind::BOUND_VARIABLE && expr::hasBoundVar(u2))
@@ -122,6 +141,18 @@ bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits)
         }
 
         TNode x = eq[0][0], y = eq[0][1];
+
+        if (!expr::hasBoundVar(x)
+            && (!ee->hasTerm(x) || ee->getRepresentative(x) != x))
+        {
+          return false;
+        }
+
+        if (!expr::hasBoundVar(y)
+            && (!ee->hasTerm(y) || ee->getRepresentative(y) != y))
+        {
+          return false;
+        }
 
         if ((x.getKind() == Kind::BOUND_VARIABLE
              && y.getKind() == Kind::BOUND_VARIABLE)
@@ -143,47 +174,31 @@ bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits)
   return true;
 }
 
-std::vector<Node> preprocess(const std::vector<Node>& lits,
-                             eq::EqualityEngine* ee)
+bool CcfvSatSolver::normalize(std::vector<Node>& lits, eq::EqualityEngine* ee)
 {
-  std::vector<Node> preprocessedLits(lits.begin(), lits.end());
-
-  // Normalizing
-
-  // Removing Ground Literals
-
-  // Flattening
-
-  // Trivial Assignments
-
-  return preprocessedLits;
 }
 
-Node CcfvSatSolver::getPVar(TNode x, TNode rep)
-{
-  auto it = d_pNodes.find({x, rep});
-  if (it != d_pNodes.end())
-  {
-    return it->second;
-  }
-  NodeManager* nm = nodeManager();
-  Node v = nm->mkDummySkolem("P_" + x.toString() + "_" + rep.toString(),
-                             nm->booleanType());
-  d_pNodes[{x, rep}] = v;
-  return v;
-}
+bool CcfvSatSolver::flatten(std::vector<Node>& lits) {}
 
-Node CcfvSatSolver::getQVar(TNode x)
+bool CcfvSatSolver::removeGroundLiterals(std::vector<Node>& lits) {}
+
+bool CcfvSatSolver::removeTrivialAssignments(std::vector<Node>& lits) {}
+
+void CcfvSatSolver::preprocess(std::vector<Node>& lits, eq::EqualityEngine* ee)
 {
-  auto it = d_qNodes.find(x);
-  if (it != d_qNodes.end())
+  std::cout << "preprocessing" << std::endl;
+  exit(1);
+  bool changed = true;
+  while (changed)
   {
-    return it->second;
+    changed = false;
+    // changed |= normalize(lits, ee);
+    // changed |= removeGroundLiterals(lits);
+    // changed |= flatten(lits);
+    // changed |= removeTrivialAssignments(lits);
   }
-  NodeManager* nm = nodeManager();
-  Node v = nm->mkDummySkolem("Q_" + x.toString(), nm->booleanType());
-  d_qNodes[x] = v;
-  return v;
+
+  Assert(isPreprocessed(lits, ee));
 }
 
 void CcfvSatSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
@@ -237,7 +252,9 @@ CcfvSatSolver::computeSignatures(eq::EqualityEngine* ee)
     eq::EqClassIterator eqc_i(rep0, ee);
     while (!eqc_i.isFinished())
     {
-      Node hoTerm = toHoApply(*eqc_i);
+      Node hoTerm = (*eqc_i).getKind() == Kind::APPLY_UF
+                        ? uf::TheoryUfRewriter::getHoApplyForApplyUf(*eqc_i)
+                        : Node(*eqc_i);
       if (hoTerm.getKind() == Kind::HO_APPLY)
       {
         if (ee->hasTerm(hoTerm[0]) && ee->hasTerm(hoTerm[1]))
@@ -271,7 +288,7 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
   Trace("ccfv-debug") << "[sat]   freeVars = " << freeVars << std::endl;
   Trace("ccfv-debug") << "[sat]   L = " << lits << std::endl;
 
-  // TODO: With --simplifications (which is enabled by default in cvc5), the
+  // TODO: With --simplification (which is enabled by default in cvc5), the
   // Equality Engine state changes substantially for some problems. It is good
   // to check if this breaks some of the operations done by preprocessing +
   // encoding or it is ok.
@@ -288,14 +305,16 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     hoLits.push_back(toHoApply(lit));
   }
 
-  Trace("ccfv-debug") << "[sat]   L (after normalization) = " << hoLits
-                      << std::endl;
+  Trace("ccfv-debug") << "[sat]   EE before preprocessing:\n"
+                      << ee->debugPrintEqc() << std::endl;
 
-  if (!isPreprocessed(hoLits))
+  if (!isPreprocessed(hoLits, ee))
   {
-    // TODO: preprocess instead of throwing an exception
-    throw Exception("Equations in L are not in the expected form");
+    preprocess(hoLits, ee);
   }
+
+  Trace("ccfv-debug") << "[sat]   L (after preprocessing) = " << hoLits
+                      << std::endl;
 
   // Ground terms that appear only in L have to be registered to be explicit
   // in the Equality Engine reasoning
@@ -402,11 +421,11 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     {
       // If u is a ground term, then x can only be terms that their
       // representatives are different than the representativa of u. We create
-      // a disjunction of every P_x_[t] for all [t] != [u].
+      // a disjunction of every P_x_[t] for all [t] != [u]
       Node repU = ee->getRepresentative(u);
       for (TNode rep : allReps)
       {
-        if (rep.getType() == x.getType() && rep != repU)
+        if (rep.getType() == x.getType() && ee->areDisequal(rep, repU, false))
         {
           disjuncts.push_back(getPVar(x, rep));
         }
@@ -430,6 +449,11 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
       }
     }
 
+    // unsat directly
+    if (disjuncts.empty())
+    {
+      return false;
+    }
     satClauses.push_back(nm->mkOr(disjuncts));
   }
 
@@ -496,10 +520,19 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
       // We only consider the signatures of the class [u0] in E^cc.
       Node rep0 = ee->getRepresentative(u0);
       auto it = signatures.find(rep0);
-      if (it == signatures.end()) continue;
+      if (it == signatures.end())
+      {
+        Trace("ccfv-debug") << "[sat]       no signatures for ground class "
+                            << rep0 << ", unsatisfiable" << std::endl;
+        return false;
+      }
 
       for (const auto& [rep1, rep2] : it->second)
       {
+        // types cannot be different
+        if (u1.getType() != rep1.getType() || u2.getType() != rep2.getType())
+          continue;
+
         if (!expr::hasBoundVar(u1) && ee->getRepresentative(u1) != rep1)
           continue;
         if (!expr::hasBoundVar(u2) && ee->getRepresentative(u2) != rep2)
@@ -515,6 +548,11 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
       }
     }
 
+    // unsat directly
+    if (disjuncts.empty())
+    {
+      return false;
+    }
     satClauses.push_back(nm->mkOr(disjuncts));
   }
 

@@ -18,7 +18,7 @@
 ; L = {u = v f'', u = v w, x = w z, x = f' z'}
 ; Clausal form: ¬(L) = (¬(u = v f'') ∨ ¬(u = v w) ∨ ¬(x = w z) ∨ ¬(x = f' z'))
 (assert (forall ((u U) (v (-> (-> U U) U)) (w (-> U U)) (x U) (z U) (zp U))
-  (or (not (= u (v fpp)))
+  (or (not (= u (v f)))
       (not (= u (v w)))
       (not (= x (w z)))
       (not (= x (fp zp))))))
