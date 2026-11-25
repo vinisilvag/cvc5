@@ -56,7 +56,9 @@ class CcfvSatSolver : protected EnvObj
 
   bool normalize(std::vector<Node>& lits, eq::EqualityEngine* ee);
   bool flatten(std::vector<Node>& lits);
-  bool removeGroundLiterals(std::vector<Node>& lits, eq::EqualityEngine* ee);
+  bool removeGroundLiterals(std::vector<Node>& lits,
+                            eq::EqualityEngine* ee,
+                            bool* unsat);
   bool removeTrivialAssignments(std::vector<Node>& lits,
                                 eq::EqualityEngine* ee,
                                 bool* unsat);

@@ -249,18 +249,64 @@ bool CcfvSatSolver::flatten(std::vector<Node>& lits)
 }
 
 bool CcfvSatSolver::removeGroundLiterals(std::vector<Node>& lits,
-                                         eq::EqualityEngine* ee)
+                                         eq::EqualityEngine* ee,
+                                         bool* unsat)
 {
-  bool changed = false;
-
   std::vector<Node> newLits;
 
   for (TNode lit : lits)
   {
-    if (expr::hasBoundVar(lit)) newLits.push_back(lit);
+    if (expr::hasBoundVar(lit))
+    {
+      newLits.push_back(lit);
+      continue;
+    }
+
+    bool entailed;
+    switch (lit.getKind())
+    {
+      case Kind::CONST_BOOLEAN:
+      {
+        entailed = lit.getConst<bool>();
+        break;
+      }
+      case Kind::EQUAL:
+      {
+        entailed = ee->areEqual(lit[0], lit[1]);
+        break;
+      }
+      case Kind::NOT:
+      {
+        if (lit[0].getKind() != Kind::EQUAL)
+        {
+          newLits.push_back(lit);
+          continue;
+        }
+        entailed = ee->areDisequal(lit[0][0], lit[0][1], false);
+        break;
+      }
+      default:
+      {
+        newLits.push_back(lit);
+        continue;
+      }
+    }
+
+    if (!entailed)
+    {
+      *unsat = true;
+      return false;
+    }
   }
 
-  return changed;
+  if (newLits.size() == lits.size())
+  {
+    return false;
+  }
+
+  lits = std::move(newLits);
+
+  return true;
 }
 
 bool CcfvSatSolver::removeTrivialAssignments(std::vector<Node>& lits,
@@ -372,7 +418,8 @@ bool CcfvSatSolver::preprocess(std::vector<Node>& lits, eq::EqualityEngine* ee)
     changed |= normalize(lits, ee);
     std::cout << "normalizado" << std::endl;
     std::cout << lits << std::endl;
-    changed |= removeGroundLiterals(lits, ee);
+    changed |= removeGroundLiterals(lits, ee, &unsat);
+    if (unsat) return false;
     std::cout << "ground literals removidos" << std::endl;
     std::cout << lits << std::endl;
     // changed |= flatten(lits);
