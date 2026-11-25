@@ -1,7 +1,6 @@
 ;; ./build/bin/cvc5 --ccfv=sat --simplification=none --miniscope-quant=off -t ccfv-debug ex12_ground_literals_entailed.smt2
 ;; (--miniscope-quant=off keeps the ground literal inside the forall; otherwise
 ;; cvc5 moves it out before CCFV sees it)
-;; Expected: normalize turns the entailed ground literal into true, which is removed; L = {c = f x} gives x |-> d, so unsat
 (set-logic HO_UF)
 (set-info :smt-lib-version 2.6)
 
