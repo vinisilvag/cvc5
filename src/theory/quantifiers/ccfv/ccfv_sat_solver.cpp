@@ -79,6 +79,22 @@ Node toHoApply(TNode n)
 bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits,
                                    eq::EqualityEngine* ee)
 {
+  // Number of occurrences of each variable in L, used to check that no
+  // trivial assignment of case 3 remains.
+  std::unordered_map<TNode, size_t> occurrences;
+  std::vector<TNode> stack(lits.begin(), lits.end());
+  while (!stack.empty())
+  {
+    TNode curr = stack.back();
+    stack.pop_back();
+    if (curr.getKind() == Kind::BOUND_VARIABLE)
+    {
+      ++occurrences[curr];
+      continue;
+    }
+    stack.insert(stack.end(), curr.begin(), curr.end());
+  }
+
   for (TNode eq : lits)
   {
     switch (eq.getKind())
@@ -129,6 +145,12 @@ bool CcfvSatSolver::isPreprocessed(const std::vector<Node>& lits,
             || (u1.getKind() != Kind::BOUND_VARIABLE && expr::hasBoundVar(u1))
             || (u2.getKind() != Kind::BOUND_VARIABLE && expr::hasBoundVar(u2))
             || (!expr::hasBoundVar(u1) && !expr::hasBoundVar(u2)))
+        {
+          return false;
+        }
+
+        // Case 3: u0 is a variable that occurs only in this equation
+        if (u0.getKind() == Kind::BOUND_VARIABLE && occurrences[u0] == 1)
         {
           return false;
         }
@@ -422,7 +444,9 @@ bool CcfvSatSolver::preprocess(std::vector<Node>& lits, eq::EqualityEngine* ee)
     if (unsat) return false;
     std::cout << "ground literals removidos" << std::endl;
     std::cout << lits << std::endl;
-    // changed |= flatten(lits);
+    changed |= flatten(lits);
+    std::cout << "pos flatten" << std::endl;
+    std::cout << lits << std::endl;
     changed |= removeTrivialAssignments(lits, ee, &unsat);
     if (unsat) return false;
     std::cout << "trivial assignments removidos" << std::endl;
