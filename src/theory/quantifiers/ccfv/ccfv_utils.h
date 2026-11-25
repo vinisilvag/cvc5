@@ -32,6 +32,24 @@ namespace ccfv {
 
 bool isSupportedTriggerTerm(TNode n);
 
+class PreprocessingUnionFind
+{
+ public:
+  PreprocessingUnionFind() = default;
+
+  Node find(TNode x);
+  /**
+   * Merges the classes of x and y. A ground representative is always kept as
+   * the representative of the merged class.
+   * @return False if both classes have (distinct) ground representatives.
+   */
+  bool merge(TNode x, TNode y);
+
+ private:
+  std::map<Node, Node> d_representative;
+  std::map<Node, size_t> d_rank;
+};
+
 class FloatersUnionFind
 {
  public:

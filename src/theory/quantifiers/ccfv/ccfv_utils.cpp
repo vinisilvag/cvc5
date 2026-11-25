@@ -56,6 +56,74 @@ bool isSupportedTriggerTerm(TNode n)
   return true;
 }
 
+Node PreprocessingUnionFind::find(TNode x)
+{
+  auto it = d_representative.find(x);
+  if (it == d_representative.end())
+  {
+    d_representative[x] = x;
+    d_rank[x] = 1;
+    return x;
+  }
+
+  std::vector<TNode> S = {};
+  Node curr = x;
+  while (d_representative[curr] != curr)
+  {
+    S.push_back(curr);
+    curr = d_representative[curr];
+  }
+  for (TNode y : S)
+  {
+    d_representative[y] = curr;
+  }
+
+  return curr;
+}
+
+bool PreprocessingUnionFind::merge(TNode x, TNode y)
+{
+  Node repX = find(x);
+  Node repY = find(y);
+  if (repX == repY)
+  {
+    return true;
+  }
+
+  bool groundX = !expr::hasBoundVar(repX);
+  bool groundY = !expr::hasBoundVar(repY);
+  if (groundX && groundY)
+  {
+    return false;
+  }
+
+  // A ground representative always wins, so that a class with a ground term
+  // is always represented by it.
+  if (groundX || groundY)
+  {
+    Node root = groundX ? repX : repY;
+    Node child = groundX ? repY : repX;
+    d_representative[child] = root;
+    d_rank[root] = std::max(d_rank[root], d_rank[child] + 1);
+    return true;
+  }
+
+  if (d_rank[repX] < d_rank[repY])
+  {
+    d_representative[repX] = repY;
+  }
+  else if (d_rank[repX] > d_rank[repY])
+  {
+    d_representative[repY] = repX;
+  }
+  else
+  {
+    d_representative[repY] = repX;
+    d_rank[repX] += 1;
+  }
+  return true;
+}
+
 FloatersUnionFind::FloatersUnionFind(const std::vector<Node>& xs)
 {
   for (TNode x : xs)

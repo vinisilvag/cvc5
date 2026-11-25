@@ -14,6 +14,7 @@
 
 #include <cstdlib>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "base/exception.h"
 #include "base/output.h"
@@ -247,125 +248,143 @@ bool CcfvSatSolver::flatten(std::vector<Node>& lits)
   return changed;
 }
 
-bool CcfvSatSolver::removeGroundLiterals(std::vector<Node>& lits)
+bool CcfvSatSolver::removeGroundLiterals(std::vector<Node>& lits,
+                                         eq::EqualityEngine* ee)
 {
   bool changed = false;
 
-  return changed;
-}
-
-bool CcfvSatSolver::removeTrivialAssignments(std::vector<Node>& lits)
-{
-  bool changed = false;
-  std::unordered_map<Node, Node> changes;
-  std::vector<Node> from, to;
-
-  // Case 3
-  // std::unordered_map<Node, size_t> occurrences;
-  // std::unordered_map<Node, bool> visited;
-  // std::vector<Node> stack = lits;
-  // while (!stack.empty())
-  // {
-  //   Node curr = stack.back();
-  //   stack.pop_back();
-  //   if (visited[curr]) continue;
-  //   visited[curr] = true;
-  //
-  //   for (Node child : curr)
-  //   {
-  //     stack.push_back(child);
-  //   }
-  // }
+  std::vector<Node> newLits;
 
   for (TNode lit : lits)
   {
-    switch (lit.getKind())
-    {
-      case Kind::EQUAL:
-      {
-        Node l = lit[0], r = lit[1];
-        if (!expr::hasBoundVar(l) && !expr::hasBoundVar(r)) continue;
-
-        if (l.getKind() == Kind::BOUND_VARIABLE
-            && r.getKind() == Kind::BOUND_VARIABLE)
-        {
-          auto it = changes.find(l);
-          if (it == changes.end())
-          {
-            std::cout << "case 2 " << l << " " << r << std::endl;
-            changes[l] = r;
-            changed = true;
-          }
-
-          continue;
-        }
-
-        Node x = l.getKind() == Kind::BOUND_VARIABLE ? l : r,
-             t = l.getKind() == Kind::BOUND_VARIABLE ? r : l;
-
-        if (!expr::hasBoundVar(t))
-        {
-          // Cases 1
-          auto it = changes.find(x);
-          if (it == changes.end())
-          {
-            std::cout << "case 1 " << x << " " << t << std::endl;
-            changes[x] = t;
-            changed = true;
-          }
-        }
-
-        break;
-      }
-      default: continue;
-    }
-  }
-
-  if (from.empty())
-  {
-    return false;
-  }
-
-  std::vector<Node> targets;
-  std::vector<Node> substitutions;
-  targets.reserve(changes.size());
-  substitutions.reserve(changes.size());
-  for (const auto& [key, val] : changes)
-  {
-    targets.push_back(key);
-    substitutions.push_back(val);
-  }
-
-  std::cout << targets << " " << substitutions << std::endl;
-
-  for (Node& lit : lits)
-  {
-    lit = lit.substitute(targets.begin(),
-                         targets.end(),
-                         substitutions.begin(),
-                         substitutions.end());
+    if (expr::hasBoundVar(lit)) newLits.push_back(lit);
   }
 
   return changed;
 }
 
-void CcfvSatSolver::preprocess(std::vector<Node>& lits, eq::EqualityEngine* ee)
+bool CcfvSatSolver::removeTrivialAssignments(std::vector<Node>& lits,
+                                             eq::EqualityEngine* ee,
+                                             bool* unsat)
+{
+  bool changed = false;
+  std::unordered_set<Node> toRemove;
+  std::vector<Node> vars;
+  ccfv::PreprocessingUnionFind unionFind;
+
+  // Cases 1 (x = y) and 2 (x = t)
+  for (TNode lit : lits)
+  {
+    if (lit.getKind() != Kind::EQUAL)
+    {
+      continue;
+    }
+
+    Node l = lit[0], r = lit[1];
+    bool lVar = l.getKind() == Kind::BOUND_VARIABLE;
+    bool rVar = r.getKind() == Kind::BOUND_VARIABLE;
+
+    if ((lVar && rVar) || (lVar && !expr::hasBoundVar(r))
+        || (rVar && !expr::hasBoundVar(l)))
+    {
+      if (!unionFind.merge(l, r))
+      {
+        // Two distinct ground representatives in the same class
+        *unsat = true;
+        return false;
+      }
+      if (lVar) vars.push_back(l);
+      if (rVar) vars.push_back(r);
+      toRemove.insert(lit);
+    }
+  }
+
+  if (!toRemove.empty())
+  {
+    std::vector<Node> from, to;
+    for (const Node& v : vars)
+    {
+      Node rep = unionFind.find(v);
+      if (rep != v)
+      {
+        from.push_back(v);
+        to.push_back(rep);
+        d_eliminated.push_back({v, rep});
+      }
+    }
+
+    std::vector<Node> newLits;
+    for (const Node& lit : lits)
+    {
+      if (toRemove.find(lit) != toRemove.end())
+      {
+        continue;
+      }
+      newLits.push_back(
+          lit.substitute(from.begin(), from.end(), to.begin(), to.end()));
+    }
+    lits = std::move(newLits);
+    changed = true;
+  }
+
+  // Case 3: x = u where x occurs neither in u nor in any other literal
+  for (size_t i = 0; i < lits.size();)
+  {
+    Node lit = lits[i];
+    if (lit.getKind() == Kind::EQUAL)
+    {
+      Node l = lit[0], r = lit[1];
+      bool lVar = l.getKind() == Kind::BOUND_VARIABLE;
+      if (lVar || r.getKind() == Kind::BOUND_VARIABLE)
+      {
+        Node x = lVar ? l : r;
+        Node u = lVar ? r : l;
+
+        bool occursElsewhere = expr::hasSubterm(u, x);
+        for (size_t j = 0; j < lits.size() && !occursElsewhere; ++j)
+        {
+          occursElsewhere = j != i && expr::hasSubterm(lits[j], x);
+        }
+
+        if (!occursElsewhere)
+        {
+          d_eliminated.push_back({x, u});
+          lits.erase(lits.begin() + i);
+          changed = true;
+          continue;
+        }
+      }
+    }
+    ++i;
+  }
+
+  return changed;
+}
+
+bool CcfvSatSolver::preprocess(std::vector<Node>& lits, eq::EqualityEngine* ee)
 {
   bool changed = true;
+  bool unsat = false;
+
   while (changed)
   {
     changed = false;
     changed |= normalize(lits, ee);
     std::cout << "normalizado" << std::endl;
     std::cout << lits << std::endl;
-    // changed |= removeGroundLiterals(lits);
+    changed |= removeGroundLiterals(lits, ee);
+    std::cout << "ground literals removidos" << std::endl;
+    std::cout << lits << std::endl;
     // changed |= flatten(lits);
-    changed |= removeTrivialAssignments(lits);
+    changed |= removeTrivialAssignments(lits, ee, &unsat);
+    if (unsat) return false;
     std::cout << "trivial assignments removidos" << std::endl;
     std::cout << lits << std::endl;
   }
 
   Assert(isPreprocessed(lits, ee));
+
+  return true;
 }
 
 void CcfvSatSolver::registerGroundTermsFromL(const std::vector<Node>& lits,
@@ -475,9 +494,13 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
   Trace("ccfv-debug") << "[sat]   EE before preprocessing:\n"
                       << ee->debugPrintEqc() << std::endl;
 
+  d_eliminated.clear();
   if (!isPreprocessed(hoLits, ee))
   {
-    preprocess(hoLits, ee);
+    if (!preprocess(hoLits, ee))
+    {
+      return false;
+    }
   }
 
   Trace("ccfv-debug") << "[sat]   L (after preprocessing) = " << hoLits
@@ -920,6 +943,17 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
     // Reconstructing the substitution
     std::vector<Node> sub(freeVars.begin(), freeVars.end());
 
+    // d_eliminated normalization: going from the last elimination to the
+    // first, each term ends up mentioning only variables that were not
+    // eliminated
+    // Like a DAG traversal
+    std::unordered_map<Node, Node> resolved;
+    for (auto it = d_eliminated.rbegin(); it != d_eliminated.rend(); ++it)
+    {
+      resolved[it->first] =
+          it->second.substitute(resolved.begin(), resolved.end());
+    }
+
     for (const auto& [key, pNode] : d_pNodes)
     {
       if (cnfStream.hasLiteral(pNode))
@@ -934,6 +968,15 @@ bool CcfvSatSolver::solve(const std::vector<Node>& freeVars,
             sub[idx] = key.second;
           }
         }
+      }
+    }
+
+    for (const auto& [var, term] : resolved)
+    {
+      auto it = std::find(freeVars.begin(), freeVars.end(), var);
+      if (it != freeVars.end())
+      {
+        sub[std::distance(freeVars.begin(), it)] = term;
       }
     }
 

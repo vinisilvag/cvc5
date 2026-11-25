@@ -56,10 +56,19 @@ class CcfvSatSolver : protected EnvObj
 
   bool normalize(std::vector<Node>& lits, eq::EqualityEngine* ee);
   bool flatten(std::vector<Node>& lits);
-  bool removeGroundLiterals(std::vector<Node>& lits);
-  bool removeTrivialAssignments(std::vector<Node>& lits);
+  bool removeGroundLiterals(std::vector<Node>& lits, eq::EqualityEngine* ee);
+  bool removeTrivialAssignments(std::vector<Node>& lits,
+                                eq::EqualityEngine* ee,
+                                bool* unsat);
 
-  void preprocess(std::vector<Node>& lits, eq::EqualityEngine* ee);
+  bool preprocess(std::vector<Node>& lits, eq::EqualityEngine* ee);
+
+  /**
+   * Variables eliminated by preprocessing as (x, t), in elimination order. A
+   * solution for x is the value of t, so they must be reconstructed in
+   * reverse order since t may contain variables eliminated later.
+   */
+  std::vector<std::pair<Node, Node>> d_eliminated;
 
   std::map<std::pair<Node, Node>, Node> d_pNodes;
   std::map<Node, Node> d_qNodes;
